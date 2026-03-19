@@ -1,0 +1,101 @@
+{
+  "name": "codesync",
+  "displayName": "PeerSync - Collaborative Coding",
+  "description": "Real-time collaborative coding with chat, audio, and video calling for VS Code",
+  "version": "0.1.0",
+  "publisher": "codesync",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "collaboration",
+    "pair programming",
+    "live share",
+    "webrtc",
+    "sync"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codesync-sidebar",
+          "title": "PeerSync",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codesync-sidebar": [
+        {
+          "type": "webview",
+          "id": "codesync.sidebar",
+          "name": "PeerSync"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "codesync.createRoom",
+        "title": "CodeSync: Create Room"
+      },
+      {
+        "command": "codesync.joinRoom",
+        "title": "CodeSync: Join Room"
+      },
+      {
+        "command": "codesync.leaveRoom",
+        "title": "CodeSync: Leave Room"
+      },
+      {
+        "command": "codesync.activateLicense",
+        "title": "CodeSync: Activate License Key"
+      }
+    ],
+    "configuration": {
+      "title": "PeerSync",
+      "properties": {
+        "codesync.serverUrl": {
+          "type": "string",
+          "default": "https://codesync-server.railway.app",
+          "description": "CodeSync signaling server URL"
+        },
+        "codesync.username": {
+          "type": "string",
+          "default": "",
+          "description": "Your display name in CodeSync rooms"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run bundle",
+    "compile": "tsc -p ./",
+    "bundle": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --format=cjs --sourcemap",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.27.4",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "simple-peer": "^9.11.1",
+    "socket.io-client": "^4.7.2",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.10"
+  }
+}
