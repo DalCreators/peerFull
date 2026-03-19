@@ -1,0 +1,10 @@
+{
+  "folders": [
+    { "name": "Extension", "path": "extension" },
+    { "name": "Server", "path": "server" },
+    { "name": "Landing", "path": "landing" }
+  ],
+  "settings": {
+    "extensions.autoDetect": false
+  }
+}

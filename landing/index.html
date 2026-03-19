@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeSync — Collaborative Coding for VS Code</title>
+  <meta name="description" content="Real-time collaborative coding with video, audio & chat built right into VS Code. No Zoom tab-switching required." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ── NAV ── -->
+  <nav>
+    <div class="container nav-inner">
+      <a href="#" class="logo">⚡ CodeSync</a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+      <a href="#pricing" class="btn btn-sm">Get Started Free</a>
+    </div>
+  </nav>
+
+  <!-- ── HERO ── -->
+  <section class="hero">
+    <div class="container">
+      <div class="badge">🎓 Built for CS students</div>
+      <h1>Code Together.<br /><span class="gradient-text">No Tab Switching.</span></h1>
+      <p class="hero-sub">
+        CodeSync is a VS Code extension that brings real-time collaborative editing,
+        text chat, and <strong>video calling</strong> into a single sidebar.
+        Like Live Share — but with Google Meet built in.
+      </p>
+      <div class="hero-actions">
+        <a href="https://marketplace.visualstudio.com/items?itemName=codesync.codesync" class="btn btn-primary btn-lg">
+          Install Extension — Free
+        </a>
+        <a href="#features" class="btn btn-ghost btn-lg">See how it works ↓</a>
+      </div>
+      <div class="hero-img">
+        <!-- Fake VS Code screenshot using CSS art -->
+        <div class="vscode-mock">
+          <div class="vscode-titlebar">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+            <span class="vscode-title">main.py — CodeSync Demo</span>
+          </div>
+          <div class="vscode-body">
+            <div class="vscode-sidebar">
+              <div class="vscode-sidebar-header">⚡ CodeSync</div>
+              <div class="vscode-section-label">Participants</div>
+              <div class="vscode-user"><span class="avatar" style="background:#7c3aed">A</span> Alex <span class="host-tag">host</span></div>
+              <div class="vscode-user"><span class="avatar" style="background:#2563eb">J</span> Jordan</div>
+              <div class="vscode-section-label" style="margin-top:12px">Video</div>
+              <div class="vscode-video-grid">
+                <div class="vscode-video-tile" style="background:#1a1a2e">📷 Alex</div>
+                <div class="vscode-video-tile" style="background:#0d1b2a">📷 Jordan</div>
+              </div>
+              <div class="vscode-section-label" style="margin-top:12px">Chat</div>
+              <div class="vscode-chat">
+                <div class="vscode-chat-msg"><span style="color:#7c3aed">Alex:</span> try line 12</div>
+                <div class="vscode-chat-msg"><span style="color:#2563eb">Jordan:</span> got it! fixing now</div>
+              </div>
+            </div>
+            <div class="vscode-editor">
+              <div class="line"><span class="ln">1</span><span class="kw">def</span> <span class="fn">fizzbuzz</span>(n):</div>
+              <div class="line"><span class="ln">2</span>  <span class="kw">for</span> i <span class="kw">in</span> range(1, n+1):</div>
+              <div class="line cursor-line"><span class="ln">3</span>    <span class="kw">if</span> i % 15 == 0:</div>
+              <div class="line"><span class="ln">4</span>      print(<span class="str">"FizzBuzz"</span>)</div>
+              <div class="line"><span class="ln">5</span>    <span class="kw">elif</span> i % 3 == 0:</div>
+              <div class="line"><span class="ln">6</span>      print(<span class="str">"Fizz"</span>)</div>
+              <div class="line"><span class="ln">7</span>    <span class="kw">elif</span> i % 5 == 0:</div>
+              <div class="line"><span class="ln">8</span>      print(<span class="str">"Buzz"</span>)</div>
+              <div class="line"><span class="ln">9</span>    <span class="kw">else</span>:</div>
+              <div class="line"><span class="ln">10</span>     print(i)</div>
+              <!-- Remote cursor indicator -->
+              <div class="remote-cursor" style="top:44px;left:120px;border-color:#2563eb">
+                <span class="cursor-label">Jordan</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><span class="stat-num">0ms</span><span class="stat-label">sync delay*</span></div>
+        <div class="stat-divider"></div>
+        <div class="stat"><span class="stat-num">P2P</span><span class="stat-label">video (no middleman)</span></div>
+        <div class="stat-divider"></div>
+        <div class="stat"><span class="stat-num">Free</span><span class="stat-label">forever plan</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ── -->
+  <section id="features" class="features">
+    <div class="container">
+      <div class="section-label">Features</div>
+      <h2>Everything you need to code together</h2>
+      <p class="section-sub">No more switching between VS Code, Zoom, and Discord. It's all in one place.</p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">✏️</div>
+          <h3>Real-time Code Sync</h3>
+          <p>Every keystroke syncs instantly using Yjs CRDTs — the same technology behind Google Docs. No conflicts, no merge hell.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🖱️</div>
+          <h3>Colored Cursors</h3>
+          <p>See exactly where your teammates are in the file with color-coded cursor indicators. Never wonder "which line are you on?"</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3>Integrated Chat</h3>
+          <p>A persistent sidebar chat so you can talk without leaving VS Code. Messages stay for the session so you can scroll back.</p>
+        </div>
+        <div class="feature-card feature-card-pro">
+          <div class="pro-label">PRO</div>
+          <div class="feature-icon">📹</div>
+          <h3>Video Calling</h3>
+          <p>Peer-to-peer WebRTC video — no server in the middle, no bandwidth limits. Camera, mic, and screen share built in.</p>
+        </div>
+        <div class="feature-card feature-card-pro">
+          <div class="pro-label">PRO</div>
+          <div class="feature-icon">🎙️</div>
+          <h3>Audio Calling</h3>
+          <p>One-click audio with mute/unmute. Talk through the problem without juggling another app.</p>
+        </div>
+        <div class="feature-card feature-card-pro">
+          <div class="pro-label">PRO</div>
+          <div class="feature-icon">⏺️</div>
+          <h3>Session Recording</h3>
+          <p>Record your session to review later, submit as a project demo, or share with a TA who missed it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── HOW IT WORKS ── -->
+  <section class="how-it-works">
+    <div class="container">
+      <div class="section-label">How it works</div>
+      <h2>Up and running in 30 seconds</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Install the extension</h3>
+          <p>Search "CodeSync" in the VS Code marketplace and click install.</p>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Create a room</h3>
+          <p>Click the CodeSync icon in the sidebar, enter your name, hit "Create Room". You get a 6-char code like <code>ABC123</code>.</p>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Share the code</h3>
+          <p>Send the code to your teammate. They paste it in their CodeSync sidebar and join instantly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PRICING ── -->
+  <section id="pricing" class="pricing">
+    <div class="container">
+      <div class="section-label">Pricing</div>
+      <h2>Simple, student-friendly pricing</h2>
+      <p class="section-sub">Start free. Upgrade when you need video calling.</p>
+
+      <div class="pricing-grid">
+        <!-- Free -->
+        <div class="pricing-card">
+          <div class="plan-name">Free</div>
+          <div class="plan-price">$0<span>/month</span></div>
+          <div class="plan-desc">Perfect for pair programming sessions</div>
+          <ul class="plan-features">
+            <li>✅ Real-time code sync</li>
+            <li>✅ Colored cursor indicators</li>
+            <li>✅ Text chat</li>
+            <li>✅ 2-person rooms</li>
+            <li>⏱️ 30-minute sessions</li>
+            <li class="muted">❌ No video/audio</li>
+            <li class="muted">❌ No session recording</li>
+          </ul>
+          <a href="https://marketplace.visualstudio.com/items?itemName=codesync.codesync" class="btn btn-secondary btn-full">
+            Install Free →
+          </a>
+        </div>
+
+        <!-- Pro -->
+        <div class="pricing-card pricing-card-pro">
+          <div class="popular-badge">Most Popular</div>
+          <div class="plan-name">Pro</div>
+          <div class="plan-price">$6<span>/month</span></div>
+          <div class="plan-desc">For teams and serious pair programmers</div>
+          <ul class="plan-features">
+            <li>✅ Everything in Free</li>
+            <li>✅ Video calling (P2P WebRTC)</li>
+            <li>✅ Audio calling</li>
+            <li>✅ Screen sharing</li>
+            <li>✅ Up to 5-person rooms</li>
+            <li>✅ Unlimited session time</li>
+            <li>✅ Session recording</li>
+          </ul>
+          <button class="btn btn-primary btn-full" id="checkout-btn" data-plan="pro">
+            Get Pro →
+          </button>
+          <p class="plan-footnote">License key delivered by email instantly</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Checkout modal -->
+  <div id="checkout-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" id="modal-close">✕</button>
+      <h3>Get CodeSync Pro</h3>
+      <p>Enter your email — we'll send your license key there after payment.</p>
+      <input id="checkout-email" type="email" placeholder="you@university.edu" />
+      <button class="btn btn-primary btn-full" id="modal-checkout-btn">Continue to Payment →</button>
+      <p class="modal-note">Powered by Stripe. Cancel anytime.</p>
+    </div>
+  </div>
+  <div id="modal-overlay" class="modal-overlay hidden"></div>
+
+  <!-- ── FAQ ── -->
+  <section id="faq" class="faq">
+    <div class="container">
+      <div class="section-label">FAQ</div>
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>Is CodeSync free to use?</summary>
+          <p>Yes! The free tier gives you real-time code sync, colored cursors, and text chat for 2 people with 30-minute sessions. Upgrade to Pro for video/audio calling and unlimited time.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How does the video calling work?</summary>
+          <p>Video is peer-to-peer using WebRTC — your video stream goes directly to your teammate's browser, not through our servers. This means lower latency and better privacy.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What happens when the 30-minute session ends?</summary>
+          <p>The extension disconnects you with a warning. You can immediately start a new free session. Pro users have unlimited time.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Can I use this for a class assignment or hackathon?</summary>
+          <p>Absolutely — that's exactly who CodeSync is for. Just make sure your course allows collaboration tools (most pair programming assignments do).</p>
+        </details>
+        <details class="faq-item">
+          <summary>How do I activate my Pro license?</summary>
+          <p>After payment, you'll receive a license key like <code>CODESYNC-XXXX-XXXX-XXXX</code> by email. In VS Code, open the command palette (Cmd/Ctrl+Shift+P) and run <strong>"CodeSync: Activate License Key"</strong>.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is my code sent to your servers?</summary>
+          <p>Document updates are relayed through the signaling server as encrypted Yjs deltas — we never store your source code. Video/audio is peer-to-peer and never touches our servers.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA ── -->
+  <section class="cta">
+    <div class="container">
+      <h2>Start coding together right now</h2>
+      <p>Free forever for 2 people. No sign-up required.</p>
+      <a href="https://marketplace.visualstudio.com/items?itemName=codesync.codesync" class="btn btn-primary btn-lg">
+        Install CodeSync Free →
+      </a>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ── -->
+  <footer>
+    <div class="container footer-inner">
+      <span class="logo">⚡ CodeSync</span>
+      <span>Built for CS students · <a href="mailto:hello@codesync.dev">hello@codesync.dev</a></span>
+      <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
