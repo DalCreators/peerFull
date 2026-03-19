@@ -194,10 +194,15 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       flex-shrink: 0;
       border: 2px solid transparent;
     }
+    .user-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     .user-name { font-size: 12px; }
+    .user-file {
+      font-size: 10px; opacity: 0.5; font-family: monospace;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .user-host-badge {
       font-size: 9px; opacity: 0.6;
-      margin-left: auto;
+      margin-left: auto; flex-shrink: 0;
     }
 
     /* ── Call ────────────────────────────────────────── */
@@ -632,16 +637,18 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
 
     function _renderUsers(users) {
       usersList.innerHTML = '';
-      users.forEach((u, i) => {
-        const colors = ['#7c3aed','#2563eb','#16a34a','#d97706','#dc2626'];
-        const color = colors[i % colors.length];
+      users.forEach((u) => {
         const div = document.createElement('div');
         div.className = 'user-item';
+        const fileName = u.currentFile ? u.currentFile.split('/').pop() : null;
         div.innerHTML = \`
-          <div class="user-avatar" style="background:\${color};\${u.isMe ? 'border-color:#7c3aed;' : ''}">
+          <div class="user-avatar" style="background:\${u.color};\${u.isMe ? 'border-color:#a78bfa;border-width:2px;' : ''}">
             \${(u.username || '?')[0].toUpperCase()}
           </div>
-          <span class="user-name">\${u.username}\${u.isMe ? ' (you)' : ''}</span>
+          <div class="user-info">
+            <span class="user-name">\${u.username}\${u.isMe ? ' (you)' : ''}</span>
+            \${fileName ? \`<span class="user-file">📄 \${fileName}</span>\` : ''}
+          </div>
           \${u.isHost ? '<span class="user-host-badge">host</span>' : ''}
         \`;
         usersList.appendChild(div);

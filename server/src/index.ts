@@ -123,6 +123,24 @@ io.on('connection', (socket: Socket) => {
     socket.to(data.roomCode).emit('yjs-update', update);
   });
 
+  // ── File focus (who opened which file) ───────────────────────────────
+  socket.on('file-focus', (data: { roomCode: string; relativePath: string }) => {
+    const room = roomManager.getRoom(data.roomCode);
+    if (!room) return;
+    const user = room.users.get(socket.id);
+    if (!user) return;
+    user.currentFile = data.relativePath;
+    // Tell others to open this file too
+    socket.to(data.roomCode).emit('user-file-focus', {
+      userId: socket.id,
+      username: user.username,
+      color: user.color,
+      relativePath: data.relativePath
+    });
+    // Refresh sidebar presence for everyone
+    broadcastUsers(data.roomCode);
+  });
+
   // ── Cursor position ──────────────────────────────────────────────────
   socket.on('cursor-update', (data: { roomCode: string; position: number; length: number }) => {
     const room = roomManager.getRoom(data.roomCode);
@@ -258,7 +276,8 @@ io.on('connection', (socket: Socket) => {
       id,
       username: u.username,
       color: u.color,
-      isHost: id === room.hostId
+      isHost: id === room.hostId,
+      currentFile: u.currentFile
     }));
     io.to(roomCode).emit('users-changed', users);
   }

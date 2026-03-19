@@ -78,7 +78,7 @@
     "vscode:prepublish": "npm run bundle",
     "compile": "tsc -p ./",
     "bundle": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:electron --external:@electron/remote --platform=node --format=cjs --sourcemap",
-    "watch": "tsc -watch -p ./",
+    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:electron --external:@electron/remote --platform=node --format=cjs --sourcemap --watch",
     "lint": "eslint src --ext ts",
     "package": "vsce package --skip-license"
   },

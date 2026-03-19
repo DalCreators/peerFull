@@ -213,8 +213,11 @@ export class YjsSync {
 
     this._editor = editor;
 
-    // Each file gets its own YText keyed by relative path
+    // Tell everyone which file we just opened
     const fileKey = vscode.workspace.asRelativePath(editor.document.uri);
+    this._socket?.emit('file-focus', { roomCode: this._roomCode, relativePath: fileKey });
+
+    // Each file gets its own YText keyed by relative path
     this._ytext = this._ydoc.getText(fileKey);
 
     const yjsContent = this._ytext.toString();
@@ -358,6 +361,17 @@ export class YjsSync {
     });
     this._socket.on('call-peer-left', (data: { peerId: string }) => {
       this._callEventCbs.forEach(cb => cb({ type: 'callPeerLeft', peerId: data.peerId }));
+    });
+
+    // Remote file focus — open the file on this user's screen
+    this._socket.on('user-file-focus', async (data: { userId: string; username: string; relativePath: string }) => {
+      if (!this._syncFolderUri) return;
+      const fileUri = vscode.Uri.joinPath(this._syncFolderUri, data.relativePath);
+      try {
+        await vscode.window.showTextDocument(fileUri, { preview: false, preserveFocus: false });
+      } catch {
+        // file may not exist yet in this user's workspace — ignore
+      }
     });
 
     // Remote file creation — write into the sync folder

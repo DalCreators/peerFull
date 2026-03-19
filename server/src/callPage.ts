@@ -123,6 +123,15 @@ export function getCallPageHtml(): string {
     const leaveBtn  = document.getElementById('leave-btn');
     const errorEl   = document.getElementById('error');
 
+    const ICE_CONFIG = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+      ]
+    };
+
     const COLORS = ['#7c3aed','#2563eb','#16a34a','#d97706','#dc2626','#0891b2'];
     let colorIdx = 0;
 
@@ -246,13 +255,13 @@ export function getCallPageHtml(): string {
 
     function initiatePeer(peerId) {
       if (peers[peerId] || !localStream) return;
-      const peer = new SimplePeer({ initiator: true, trickle: true, stream: localStream });
+      const peer = new SimplePeer({ initiator: true, trickle: true, stream: localStream, config: ICE_CONFIG });
       setupPeer(peerId, peer, true);
     }
 
     function handleSignal(peerId, signal) {
       if (!peers[peerId]) {
-        const peer = new SimplePeer({ initiator: false, trickle: true, stream: localStream });
+        const peer = new SimplePeer({ initiator: false, trickle: true, stream: localStream, config: ICE_CONFIG });
         setupPeer(peerId, peer, false);
       }
       peers[peerId].signal(signal);

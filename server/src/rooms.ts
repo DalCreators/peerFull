@@ -16,6 +16,7 @@ export interface User {
   id: string;
   username: string;
   color: string;
+  currentFile?: string;
 }
 
 export class Room {
