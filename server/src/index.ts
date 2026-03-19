@@ -133,6 +133,7 @@ io.on('connection', (socket: Socket) => {
 
     socket.to(data.roomCode).emit('cursor-update', {
       userId: socket.id,
+      username: user.username,
       color: user.color,
       position: data.position,
       length: data.length

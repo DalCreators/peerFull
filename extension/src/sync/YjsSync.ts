@@ -406,24 +406,25 @@ export class YjsSync {
     });
   }
 
-  private _renderRemoteCursor(data: { userId: string; color: string; position: number; length: number }) {
+  private _renderRemoteCursor(data: { userId: string; username?: string; color: string; position: number; length: number }) {
     if (!this._editor) return;
 
     // Dispose old decoration for this user
     const old = this._cursors.get(data.userId);
     old?.dispose();
 
+    const label = data.username ?? data.userId.slice(0, 6);
     const decorationType = vscode.window.createTextEditorDecorationType({
-      borderWidth: '2px',
+      borderWidth: '0 0 0 2px',
       borderStyle: 'solid',
       borderColor: data.color,
       backgroundColor: `${data.color}22`,
-      // Show a thin colored bar before the character (cursor indicator)
       before: {
-        contentText: '',
+        contentText: ` ${label} `,
         backgroundColor: data.color,
-        width: '2px',
-        margin: '0 1px 0 0'
+        color: '#ffffff',
+        fontWeight: 'bold',
+        margin: '0 4px 0 0',
       }
     });
     this._cursors.set(data.userId, decorationType);

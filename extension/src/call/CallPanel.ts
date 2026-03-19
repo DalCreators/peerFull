@@ -343,9 +343,9 @@ export class CallPanel {
           controls.style.display = 'flex';
           addTile('__me__', username, localStream, true);
           camBtn.style.display = 'none';
-        } catch (__) {
+        } catch (err2) {
           // Receive-only — show browser banner so they can send from browser
-          log('Viewing call (open in browser to talk)');
+          log('Viewing call (open in browser to talk) — error: ' + err2.name + ': ' + err2.message, true);
           browserBanner.style.display = 'flex';
         }
       }
