@@ -491,11 +491,10 @@ export class YjsSync {
     const old = this._cursors.get(data.userId);
     old?.dispose();
 
-    const label = data.username ?? data.userId.slice(0, 6);
     const doc = this._editor.document;
     const startPos = doc.positionAt(data.position);
 
-    // For the name tag to render, `after` needs a non-empty range.
+    // For the dot to render, `after` needs a non-empty range.
     // If there's no selection, extend to the next character on the line.
     // If at end of line/file, keep it as-is (VS Code renders `after` on empty lines too).
     let endPos = doc.positionAt(data.position + data.length);
@@ -511,9 +510,9 @@ export class YjsSync {
       borderWidth: '0 0 0 2px',
       borderStyle: 'solid',
       borderColor: data.color,
-      // Name tag floats after the cursor position
+      // Small colored dot floats after the cursor position
       after: {
-        contentText: ` ${label} `,
+        contentText: ' ● ',
         backgroundColor: data.color,
         color: '#ffffff',
         fontWeight: '600',
