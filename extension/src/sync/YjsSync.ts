@@ -242,35 +242,34 @@ export class YjsSync {
       vscode.workspace.applyEdit(edit).then(() => { this._applyingRemoteCount--; });
     }
 
-    // Observe remote changes for THIS file — replace full doc with Yjs state
+    // Observe remote changes for THIS file — apply precise delta edits (no full replace)
     this._ytextObserver = async (event: Y.YTextEvent) => {
       if (!this._editor || event.transaction.local) return;
       if (this._editor.document !== editor.document) return;
 
-      const newContent = this._ytext!.toString();
-      const currentContent = this._editor.document.getText();
-      if (newContent === currentContent) return;
+      const doc = this._editor.document;
+      const wsEdit = new vscode.WorkspaceEdit();
+      let offset = 0;
 
-      const selections = this._editor.selections;
-      const edit = new vscode.WorkspaceEdit();
-      edit.replace(
-        this._editor.document.uri,
-        new vscode.Range(new vscode.Position(0, 0), this._editor.document.positionAt(currentContent.length)),
-        newContent
-      );
+      for (const op of event.changes.delta) {
+        if (op.retain !== undefined) {
+          offset += op.retain;
+        } else if (op.insert !== undefined) {
+          const insertText = typeof op.insert === 'string' ? op.insert : '';
+          if (insertText) {
+            wsEdit.insert(doc.uri, doc.positionAt(offset), insertText);
+            offset += insertText.length;
+          }
+        } else if (op.delete !== undefined) {
+          const start = doc.positionAt(offset);
+          const end = doc.positionAt(offset + op.delete);
+          wsEdit.delete(doc.uri, new vscode.Range(start, end));
+        }
+      }
 
       this._applyingRemoteCount++;
-      await vscode.workspace.applyEdit(edit);
+      await vscode.workspace.applyEdit(wsEdit);
       this._applyingRemoteCount--;
-
-      if (this._editor) {
-        const docLen = this._editor.document.getText().length;
-        this._editor.selections = selections.map(sel => {
-          const s = this._editor!.document.positionAt(Math.min(this._editor!.document.offsetAt(sel.start), docLen));
-          const e = this._editor!.document.positionAt(Math.min(this._editor!.document.offsetAt(sel.end), docLen));
-          return new vscode.Selection(s, e);
-        });
-      }
     };
     this._ytext.observe(this._ytextObserver);
 
@@ -337,7 +336,7 @@ export class YjsSync {
   private _connect(serverUrl: string, username: string) {
     this._myUsername = username;
     this._socket = io(serverUrl, {
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
       timeout: 10000
     });
 
