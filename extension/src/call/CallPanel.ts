@@ -283,15 +283,18 @@ export class CallPanel {
     }
 
     function _setTileContent(tile, stream, isSelf) {
-      const hasVideo = stream && stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled;
+      // Only check track existence, not .enabled — remote tracks may report enabled=false
+      const hasVideo = stream && stream.getVideoTracks().length > 0;
       const old = tile.querySelector('video, .no-video');
       if (old) old.remove();
 
       if (hasVideo) {
         const video = document.createElement('video');
-        video.autoplay = true; video.playsInline = true;
-        if (isSelf) { video.muted = true; video.style.transform = 'scaleX(-1)'; }
+        video.autoplay = true; video.playsInline = true; video.muted = true;
+        if (isSelf) video.style.transform = 'scaleX(-1)';
         video.srcObject = stream;
+        // Explicit play() required — Electron webview autoplay policy may block it
+        video.play().catch(() => {});
         tile.insertBefore(video, tile.querySelector('.tile-label'));
       } else {
         const noVid = document.createElement('div');
@@ -446,9 +449,15 @@ export class CallPanel {
 
       peer.on('stream', stream => {
         log('Receiving stream 🎥');
-        // mute in panel — audio plays from the companion mini-browser window
-        stream.getAudioTracks().forEach(t => { t.enabled = false; });
         updateTileStream(peerId, stream);
+      });
+
+      // 'track' fires per-track and is more reliable than 'stream' in Electron webviews
+      peer.on('track', (track, stream) => {
+        if (track.kind === 'video') {
+          log('Receiving video 🎥');
+          updateTileStream(peerId, stream);
+        }
       });
 
       peer.on('close', () => { cleanupPeer(peerId); removeTile(peerId); });
