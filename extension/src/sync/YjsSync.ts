@@ -314,6 +314,21 @@ export class YjsSync {
     this._socket?.emit('run-output', { roomCode: this._roomCode, chunk, isError, done });
   }
 
+  async shareActiveFile(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || !this._roomCode) return;
+
+    const fileKey = this._syncFolderUri
+      ? path.relative(this._syncFolderUri.fsPath, editor.document.uri.fsPath)
+      : vscode.workspace.asRelativePath(editor.document.uri);
+
+    const content = editor.document.getText();
+    this._socket?.emit('share-file', { roomCode: this._roomCode, relativePath: fileKey, content });
+
+    // Bind Yjs to this file so edits sync immediately
+    this.bindEditor(editor);
+  }
+
   joinCall(isPanel = false) { this._socket?.emit('call-join', { roomCode: this._roomCode, isPanel }); }
   leaveCall() { this._socket?.emit('call-leave', { roomCode: this._roomCode }); }
 
@@ -402,6 +417,18 @@ export class YjsSync {
       this._remoteCreatedFiles.add(folderUri.fsPath);
       await vscode.workspace.fs.createDirectory(folderUri);
       setTimeout(() => this._remoteCreatedFiles.delete(folderUri.fsPath), 500);
+    });
+
+    // A participant shared a file — write it locally and open it
+    this._socket.on('file-shared', async (data: { relativePath: string; content: string }) => {
+      if (!this._syncFolderUri) return;
+      const fileUri = vscode.Uri.joinPath(this._syncFolderUri, data.relativePath);
+      this._remoteCreatedFiles.add(fileUri.fsPath);
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(fileUri.fsPath)));
+      await vscode.workspace.fs.writeFile(fileUri, Buffer.from(data.content, 'utf8'));
+      const editor = await vscode.window.showTextDocument(fileUri, { preview: false });
+      this.bindEditor(editor);
+      setTimeout(() => this._remoteCreatedFiles.delete(fileUri.fsPath), 500);
     });
 
     // When a new peer joins, re-broadcast the currently open file so they open it immediately

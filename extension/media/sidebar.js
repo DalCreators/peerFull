@@ -146,6 +146,15 @@
     vscode.postMessage({ type: 'activateLicense' });
   });
 
+  var shareFileBtn = document.getElementById('share-file-btn');
+  var shareFileMsg = document.getElementById('share-file-msg');
+
+  shareFileBtn.addEventListener('click', function() {
+    vscode.postMessage({ type: 'shareFile' });
+    shareFileMsg.style.display = 'block';
+    setTimeout(function() { shareFileMsg.style.display = 'none'; }, 2000);
+  });
+
   runBtn.addEventListener('click', function() {
     runOutput.innerHTML = '';
     runOutput.style.display = 'block';

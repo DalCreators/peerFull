@@ -241,6 +241,13 @@ io.on('connection', (socket: Socket) => {
     socket.to(data.roomCode).emit('call-peer-left', { peerId: socket.id });
   });
 
+  // ── Share file (manual broadcast of active file to all peers) ────────
+  socket.on('share-file', (data: { roomCode: string; relativePath: string; content: string }) => {
+    const room = roomManager.getRoom(data.roomCode);
+    if (room) { room.folderSnapshot[data.relativePath] = data.content; }
+    socket.to(data.roomCode).emit('file-shared', { relativePath: data.relativePath, content: data.content });
+  });
+
   // ── Shared code run output ───────────────────────────────────────────
   socket.on('run-output', (data: { roomCode: string; chunk: string; isError?: boolean; done?: boolean }) => {
     const room = roomManager.getRoom(data.roomCode);

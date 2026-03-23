@@ -311,6 +311,12 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
         </div>
       </div>
 
+      <!-- Share File -->
+      <div class="section">
+        <button id="share-file-btn" class="btn btn-secondary" style="font-size:12px;">Share Active File with Everyone</button>
+        <div id="share-file-msg" style="font-size:10px;opacity:0.6;text-align:center;margin-top:4px;display:none;">File shared!</div>
+      </div>
+
       <!-- Run -->
       <div class="section">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">

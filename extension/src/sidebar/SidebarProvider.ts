@@ -93,6 +93,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           // Call runs in the browser — nothing to close on the extension side
           break;
 
+        case 'shareFile':
+          this._yjsSync.shareActiveFile();
+          break;
+
         case 'runCode': {
           const editor = vscode.window.activeTextEditor;
           if (!editor) {
