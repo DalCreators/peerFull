@@ -47,6 +47,7 @@ app.use('/api/stripe', stripeRouter);
 const roomManager = new RoomManager();
 // Track voice-only browser sockets (socketId -> roomCode)
 const voiceOnlySockets = new Map<string, string>();
+const voiceSocketUsernames = new Map<string, string>(); // socketId → username
 
 // ── Socket.io event handling ─────────────────────────────────────────────────
 io.on('connection', (socket: Socket) => {
@@ -219,10 +220,15 @@ io.on('connection', (socket: Socket) => {
     if (!room) { callback({ error: 'Room not found' }); return; }
     socket.join(data.roomCode);
     voiceOnlySockets.set(socket.id, data.roomCode);
+    voiceSocketUsernames.set(socket.id, data.username);
     room.callParticipants.add(socket.id);
     const others = Array.from(room.callParticipants).filter(id => id !== socket.id);
-    socket.emit('call-participants', { participants: others });
-    socket.to(data.roomCode).emit('call-peer-joined', { peerId: socket.id });
+    const othersWithNames = others.map(id => ({
+      peerId: id,
+      username: voiceSocketUsernames.get(id) || room.users.get(id)?.username || id.slice(0, 6)
+    }));
+    socket.emit('call-participants', { participants: othersWithNames });
+    socket.to(data.roomCode).emit('call-peer-joined', { peerId: socket.id, username: data.username });
     console.log(`[Call] ${data.username} joined voice call in ${data.roomCode}`);
     callback({ success: true });
   });
@@ -276,6 +282,7 @@ io.on('connection', (socket: Socket) => {
       const room = roomManager.getRoom(voiceRoomCode);
       if (room) room.callParticipants.delete(socket.id);
       voiceOnlySockets.delete(socket.id);
+      voiceSocketUsernames.delete(socket.id);
       socket.to(voiceRoomCode).emit('call-peer-left', { peerId: socket.id });
     }
   });

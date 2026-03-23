@@ -28,7 +28,7 @@ export class LicenseManager {
   async activateLicense(key: string): Promise<boolean> {
     try {
       const serverUrl = vscode.workspace.getConfiguration('codesync').get<string>('serverUrl')
-        || 'https://peersync-production.up.railway.app';
+        || 'https://awake-solace-production-bb18.up.railway.app';
 
       const response = await fetch(`${serverUrl}/api/license/validate`, {
         method: 'POST',

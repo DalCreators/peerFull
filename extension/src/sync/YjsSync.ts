@@ -118,6 +118,14 @@ export class YjsSync {
           this._syncFolderUri = tmpUri;
 
           this._startFileWatcher();
+
+          // Open the first snapshot file so the joiner sees something immediately
+          const firstFile = Object.keys(snapshot)[0];
+          if (firstFile) {
+            const fileUri = vscode.Uri.file(path.join(tmpDir, firstFile));
+            vscode.window.showTextDocument(fileUri, { preview: false }).then(() => {}, () => {});
+          }
+
           resolve(true);
         } else {
           resolve(false);
@@ -396,6 +404,14 @@ export class YjsSync {
       setTimeout(() => this._remoteCreatedFiles.delete(folderUri.fsPath), 500);
     });
 
+    // When a new peer joins, re-broadcast the currently open file so they open it immediately
+    this._socket.on('peer-joined', () => {
+      if (this._editor && this._roomCode && this._syncFolderUri) {
+        const fileKey = path.relative(this._syncFolderUri.fsPath, this._editor.document.uri.fsPath);
+        this._socket?.emit('file-focus', { roomCode: this._roomCode, relativePath: fileKey });
+      }
+    });
+
     this._socket.on('run-output', (data: { chunk: string; isError?: boolean; done?: boolean; username?: string }) => {
       this._runOutputCbs.forEach(cb => cb(data));
     });
@@ -553,6 +569,6 @@ export class YjsSync {
 
   private _getServerUrl(): string {
     return vscode.workspace.getConfiguration('codesync').get<string>('serverUrl')
-      || 'https://peersync-production.up.railway.app';
+      || 'https://awake-solace-production-bb18.up.railway.app';
   }
 }

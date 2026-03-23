@@ -112,6 +112,7 @@ export function getCallPageHtml(): string {
     let localStream = null;
     let micOn = true, camOn = true;
     const peers = {};
+    const peerUsernames = {};
     let pendingPeers = [];
     let pendingSignals = [];
 
@@ -172,7 +173,7 @@ export function getCallPageHtml(): string {
 
     function updateTileStream(id, stream) {
       const tile = document.getElementById('tile-' + id);
-      if (!tile) return;
+      if (!tile) { addTile(id, peerUsernames[id] || id.slice(0, 6), stream, false); return; }
       const existing = tile.querySelector('video');
       if (existing) { existing.srcObject = stream; return; }
       // Replace no-video div with video
@@ -215,7 +216,7 @@ export function getCallPageHtml(): string {
         addTile('__me__', username, localStream, true);
 
         // Process any events that arrived before stream was ready
-        pendingPeers.forEach(id => initiatePeer(id));
+        pendingPeers.forEach(({ peerId, username: u }) => { peerUsernames[peerId] = u; initiatePeer(peerId); });
         pendingPeers = [];
         pendingSignals.forEach(({ peerId, signal }) => handleSignal(peerId, signal));
         pendingSignals = [];
@@ -225,14 +226,18 @@ export function getCallPageHtml(): string {
     // ── Socket events ────────────────────────────────────────────────────
 
     socket.on('call-participants', ({ participants }) => {
-      log(participants.length ? 'Connecting to ' + participants.length + ' peer(s)…' : 'In call — waiting for others…');
-      if (localStream) participants.forEach(id => initiatePeer(id));
-      else pendingPeers.push(...participants);
+      log(participants.length ? 'Connecting to ' + participants.length + ' peer(s)...' : 'In call — waiting for others...');
+      participants.forEach(({ peerId, username: u }) => {
+        peerUsernames[peerId] = u;
+        if (localStream) initiatePeer(peerId);
+        else pendingPeers.push({ peerId, username: u });
+      });
     });
 
-    socket.on('call-peer-joined', ({ peerId }) => {
-      // New voice peer joined — they will initiate toward us via call-participants
-      log('Peer joining…');
+    socket.on('call-peer-joined', ({ peerId, username: u }) => {
+      // Store their username — they will initiate toward us via WebRTC
+      peerUsernames[peerId] = u || peerId.slice(0, 6);
+      log((u || 'Someone') + ' joined the call...');
     });
 
     // Panel joined as display-only — WE initiate (we have the stream)
@@ -279,9 +284,8 @@ export function getCallPageHtml(): string {
       });
 
       peer.on('connect', () => {
-        // Add placeholder tile until stream arrives
         if (!document.getElementById('tile-' + peerId)) {
-          addTile(peerId, peerId.slice(0, 6), null, false);
+          addTile(peerId, peerUsernames[peerId] || peerId.slice(0, 6), null, false);
         }
       });
 
