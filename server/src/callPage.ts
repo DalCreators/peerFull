@@ -103,10 +103,28 @@ export function getCallPageHtml(): string {
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/simple-peer@9/simplepeer.min.js"></script>
   <script>
-    const params   = new URLSearchParams(location.search);
-    const roomCode = location.pathname.split('/').pop().toUpperCase();
-    const username = params.get('u') || 'Anonymous';
+    const params    = new URLSearchParams(location.search);
+    const roomCode  = location.pathname.split('/').pop().toUpperCase();
+    const username  = params.get('u') || 'Anonymous';
+    const isMinimal = params.get('minimal') === '1';
     document.getElementById('room-tag').textContent = 'Room: ' + roomCode;
+
+    // ── Minimal mode — tiny floating mic/cam widget, no video grid ───────
+    if (isMinimal) {
+      const header = document.getElementById('header');
+      const grid   = document.getElementById('video-grid');
+      if (header) header.style.display = 'none';
+      if (grid)   grid.style.display   = 'none';
+      document.body.style.cssText =
+        'background:#1e1e1e;display:flex;flex-direction:column;' +
+        'align-items:center;justify-content:center;height:100vh;gap:14px;overflow:hidden;';
+      const badge = document.createElement('div');
+      badge.style.cssText = 'font-size:13px;color:#a78bfa;font-family:"Segoe UI",sans-serif;font-weight:600;';
+      badge.textContent   = '🎙 PeerSync — In Call';
+      document.body.insertBefore(badge, document.getElementById('controls'));
+      const ctrl = document.getElementById('controls');
+      if (ctrl) { ctrl.style.cssText = 'display:flex;gap:12px;border:none;background:transparent;padding:0;'; }
+    }
 
     const socket = io();
     let localStream = null;

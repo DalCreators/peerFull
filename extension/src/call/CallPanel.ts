@@ -70,16 +70,6 @@ export class CallPanel {
           yjsSync.forceEndCall();
           this._dispose();
           break;
-        case 'permissionDenied':
-          vscode.window.showInformationMessage(
-            'PeerSync: Grant camera/microphone access to VS Code or Cursor in System Preferences → Privacy & Security.',
-            'Open Privacy Settings'
-          ).then(choice => {
-            if (choice === 'Open Privacy Settings') {
-              vscode.env.openExternal(vscode.Uri.parse('x-apple.systempreferences:com.apple.preference.security?Privacy_Camera'));
-            }
-          });
-          break;
       }
     });
 
@@ -111,7 +101,7 @@ export class CallPanel {
     this._panel.dispose();
   }
 
-  private _buildHtml(simplePeerUri: vscode.Uri, roomCode: string, username: string): string {
+  private _buildHtml(simplePeerUri: vscode.Uri, _roomCode: string, username: string): string {
     const nonce = getNonce();
     const webview = this._panel.webview;
 
@@ -197,9 +187,18 @@ export class CallPanel {
       color: var(--vscode-foreground, #ccc); transition: background 0.15s;
     }
     .ctrl-btn:hover { filter: brightness(1.2); }
-    .ctrl-btn.off { background: #dc2626; }
     #leave-btn { background: #dc2626; color: #fff; }
-    #mic-btn, #cam-btn { display: none; }
+    #pip-btn { position: relative; }
+    #pip-btn.pulse::after {
+      content: '';
+      position: absolute; inset: -3px; border-radius: 50%;
+      border: 2px solid #7c3aed;
+      animation: pip-ring 1s ease-out infinite;
+    }
+    @keyframes pip-ring {
+      0%   { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.6); }
+    }
 
   </style>
 </head>
@@ -214,9 +213,8 @@ export class CallPanel {
   </div>
 
   <div id="controls">
-    <button class="ctrl-btn" id="mic-btn" title="Mute">🎤</button>
-    <button class="ctrl-btn" id="cam-btn" title="Camera off">📷</button>
-    <button class="ctrl-btn" id="leave-btn" title="Leave">📵</button>
+    <button class="ctrl-btn" id="pip-btn" title="Float video (Picture-in-Picture)">📺</button>
+    <button class="ctrl-btn" id="leave-btn" title="Leave call">📵</button>
   </div>
 
   <script nonce="${nonce}" src="${simplePeerUri}"></script>
@@ -227,19 +225,15 @@ export class CallPanel {
     const COLORS = ['#7c3aed','#2563eb','#16a34a','#d97706','#dc2626','#0891b2'];
     let colorIdx = 0;
 
-    // Panel is RECEIVE-ONLY by default; if getUserMedia succeeds we also send
-    let localStream = null;
-    let micOn = true, camOn = true;
+    // Panel is display-only — mic/cam handled by the companion mini-browser window
     const peers = {};
-    let pendingSignals = []; // signals before stream attempt finishes
+    let pendingSignals = [];
 
-    const statusbar  = document.getElementById('statusbar');
-    const grid       = document.getElementById('video-grid');
-    const empty      = document.getElementById('empty');
-    const controls   = document.getElementById('controls');
-    const micBtn   = document.getElementById('mic-btn');
-    const camBtn   = document.getElementById('cam-btn');
-    const leaveBtn = document.getElementById('leave-btn');
+    const statusbar = document.getElementById('statusbar');
+    const grid      = document.getElementById('video-grid');
+    const empty     = document.getElementById('empty');
+    const pipBtn    = document.getElementById('pip-btn');
+    const leaveBtn  = document.getElementById('leave-btn');
 
     function log(msg, isError) {
       statusbar.textContent = msg;
@@ -266,8 +260,8 @@ export class CallPanel {
       tile.appendChild(label);
       grid.appendChild(tile);
 
-      // Auto-enter PiP on first tile
-      if (!pipActive) enterPip();
+      // Pulse the 📺 button to tell the user to click it for PiP
+      if (!pipActive) pipBtn.classList.add('pulse');
     }
 
     function _setTileContent(tile, stream, isSelf) {
@@ -357,7 +351,13 @@ export class CallPanel {
         pipVideo.addEventListener('leavepictureinpicture', () => {
           setTimeout(() => {
             if (!pipVideo) return;
-            pipVideo.requestPictureInPicture().catch(() => {});
+            pipVideo.requestPictureInPicture().catch(() => {
+              // Re-enter failed — reset button so user can try again
+              pipActive = false;
+              pipBtn.textContent = '📺';
+              pipBtn.title = 'Float video (Picture-in-Picture)';
+              pipBtn.classList.add('pulse');
+            });
           }, 300);
         });
       } catch(e) {
@@ -372,31 +372,9 @@ export class CallPanel {
       pipVideo?.remove(); pipVideo = null; pipActive = false;
     }
 
-    async function startPanel() {
-      log('Joining call…');
-
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        log('In call 🎙');
-        micBtn.style.display = 'flex';
-        camBtn.style.display = 'flex';
-        addTile('__me__', username, localStream, true);
-      } catch (e1) {
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-          log('In call (audio only) 🎙');
-          micBtn.style.display = 'flex';
-          addTile('__me__', username, localStream, true);
-        } catch (e2) {
-          if (e2.name === 'NotAllowedError' || e2.name === 'PermissionDeniedError') {
-            log('Camera/mic blocked — check notification', true);
-            vscode.postMessage({ type: 'permissionDenied' });
-          } else {
-            log('No mic/cam — viewing only');
-          }
-        }
-      }
-
+    function startPanel() {
+      log('In call 🎙');
+      // mic/cam handled by the companion mini-browser window
       pendingSignals.forEach(({ peerId, signal }) => _applySignal(peerId, signal));
       pendingSignals = [];
     }
@@ -428,11 +406,7 @@ export class CallPanel {
     function _applySignal(peerId, signal) {
       if (!peers[peerId]) {
         // Non-initiator — we receive the stream from the browser
-        const peer = new SimplePeer({
-          initiator: false,
-          trickle: true,
-          stream: localStream || undefined  // send our stream if we have one
-        });
+        const peer = new SimplePeer({ initiator: false, trickle: true });
         _setupPeer(peerId, peer);
       }
       peers[peerId].signal(signal);
@@ -454,6 +428,8 @@ export class CallPanel {
 
       peer.on('stream', stream => {
         log('Receiving stream 🎥');
+        // mute in panel — audio plays from the companion mini-browser window
+        stream.getAudioTracks().forEach(t => { t.enabled = false; });
         updateTileStream(peerId, stream);
       });
 
@@ -469,26 +445,23 @@ export class CallPanel {
 
     // ── Controls ──────────────────────────────────────────────────────
 
-    micBtn.addEventListener('click', () => {
-      micOn = !micOn;
-      localStream?.getAudioTracks().forEach(t => { t.enabled = micOn; });
-      micBtn.textContent = micOn ? '🎤' : '🔇';
-      micBtn.classList.toggle('off', !micOn);
-    });
-
-    camBtn.addEventListener('click', () => {
-      camOn = !camOn;
-      localStream?.getVideoTracks().forEach(t => { t.enabled = camOn; });
-      camBtn.textContent = camOn ? '📷' : '🚫';
-      camBtn.classList.toggle('off', !camOn);
-      // Update self tile
-      const selfTile = document.getElementById('tile-__me__');
-      if (selfTile) _setTileContent(selfTile, localStream, true);
+    pipBtn.addEventListener('click', async () => {
+      if (pipActive) {
+        exitPip();
+        pipBtn.textContent = '📺';
+        pipBtn.title = 'Float video (Picture-in-Picture)';
+      } else {
+        pipBtn.classList.remove('pulse');
+        await enterPip();
+        if (pipActive) {
+          pipBtn.textContent = '⊡';
+          pipBtn.title = 'Exit float';
+        }
+      }
     });
 
     leaveBtn.addEventListener('click', () => {
       exitPip();
-      localStream?.getTracks().forEach(t => t.stop());
       Object.values(peers).forEach(p => { try { p.destroy(); } catch(_) {} });
       vscode.postMessage({ type: 'leaveCall' });
     });

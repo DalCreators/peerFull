@@ -82,7 +82,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           const roomCode = this._yjsSync.getRoomCode();
           const username = this._getUsername();
           if (roomCode) {
+            const serverUrl = this._yjsSync.getServerUrl();
+            const callUrl = `${serverUrl}/call/${roomCode}?u=${encodeURIComponent(username)}`;
             CallPanel.open(this._context, this._yjsSync, roomCode, username);
+            openMinimalCallBrowser(callUrl);
           }
           break;
         }
@@ -220,5 +223,54 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const isPro = this._licenseManager.isPro();
     const username = vscode.workspace.getConfiguration('codesync').get<string>('username') || '';
     this._post({ type: 'init', isPro, username });
+  }
+}
+
+/**
+ * Opens the call URL in a minimal Chrome/Edge app-mode window (no address bar,
+ * no tabs, ~300×160px). Falls back to vscode.env.openExternal if no Chromium
+ * browser is found.
+ */
+/**
+ * Opens the call URL as a minimal 300×160 app-mode window.
+ * Uses direct binary spawn so --window-size is respected even when the
+ * browser is already running. Falls back to vscode.env.openExternal.
+ */
+function openMinimalCallBrowser(url: string): void {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const cp = require('child_process') as typeof import('child_process');
+  const minimalUrl = `${url}${url.includes('?') ? '&' : '?'}minimal=1`;
+  const spawnArgs = [`--app=${minimalUrl}`, '--window-size=300,160', '--window-position=40,40', '--new-window'];
+
+  const trySpawn = (bins: string[], fallback: () => void) => {
+    const next = (i: number): void => {
+      if (i >= bins.length) { fallback(); return; }
+      const child = cp.spawn(bins[i], spawnArgs, { detached: true, stdio: 'ignore' });
+      child.on('error', () => next(i + 1));
+      child.unref();
+    };
+    next(0);
+  };
+
+  if (process.platform === 'darwin') {
+    trySpawn([
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    ], () => vscode.env.openExternal(vscode.Uri.parse(url)));
+  } else if (process.platform === 'win32') {
+    const local  = process.env['LOCALAPPDATA'] ?? '';
+    const prog86 = process.env['ProgramFiles(x86)'] ?? process.env['ProgramFiles'] ?? '';
+    trySpawn([
+      `${local}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${prog86}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${prog86}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      `${local}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    ], () => vscode.env.openExternal(vscode.Uri.parse(url)));
+  } else {
+    trySpawn(
+      ['google-chrome', 'chromium-browser', 'chromium'],
+      () => vscode.env.openExternal(vscode.Uri.parse(url))
+    );
   }
 }
