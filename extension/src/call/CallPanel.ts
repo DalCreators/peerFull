@@ -234,6 +234,7 @@ export class CallPanel {
     // Panel is display-only — mic/cam handled by the companion mini-browser window
     const peers = {};
     let pendingSignals = [];
+    let panelReady = false;
 
     const statusbar = document.getElementById('statusbar');
     const grid      = document.getElementById('video-grid');
@@ -383,6 +384,7 @@ export class CallPanel {
 
     function startPanel() {
       log('In call 🎙');
+      panelReady = true;
       // Show local "You" placeholder — camera is in the companion mini-browser window
       addTile('__me__', username + ' (you)', null, true);
       pendingSignals.forEach(({ peerId, signal }) => _applySignal(peerId, signal));
@@ -405,8 +407,7 @@ export class CallPanel {
     // ── WebRTC (panel is always non-initiator) ─────────────────────────
 
     function handleSignal(peerId, signal) {
-      // Buffer if we haven't finished the getUserMedia attempt yet
-      if (localStream === null && pendingSignals !== null) {
+      if (!panelReady) {
         pendingSignals.push({ peerId, signal });
         return;
       }
