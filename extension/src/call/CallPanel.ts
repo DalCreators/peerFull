@@ -181,7 +181,7 @@ export class CallPanel {
 
     /* ── Controls ── */
     #controls {
-      display: none; align-items: center; justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       gap: 10px; padding: 10px 12px;
       border-top: 1px solid var(--vscode-panel-border, #333); flex-shrink: 0;
     }
@@ -193,7 +193,9 @@ export class CallPanel {
     }
     .ctrl-btn:hover { filter: brightness(1.2); }
     .ctrl-btn.off { background: #dc2626; }
+    .ctrl-btn.active { background: #7c3aed; color: #fff; }
     #leave-btn { background: #dc2626; color: #fff; }
+    #mic-btn, #cam-btn { display: none; }
 
     /* ── Browser fallback banner ── */
     #browser-banner {
@@ -227,6 +229,7 @@ export class CallPanel {
   <div id="controls">
     <button class="ctrl-btn" id="mic-btn" title="Mute">🎤</button>
     <button class="ctrl-btn" id="cam-btn" title="Camera off">📷</button>
+    <button class="ctrl-btn" id="float-btn" title="Float video">⧉</button>
     <button class="ctrl-btn" id="leave-btn" title="Leave">📵</button>
   </div>
 
@@ -334,15 +337,15 @@ export class CallPanel {
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         log('In call 🎙');
-        controls.style.display = 'flex';
+        micBtn.style.display = 'flex';
+        camBtn.style.display = 'flex';
         addTile('__me__', username, localStream, true);
       } catch (_) {
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           log('In call (audio only) 🎙');
-          controls.style.display = 'flex';
+          micBtn.style.display = 'flex';
           addTile('__me__', username, localStream, true);
-          camBtn.style.display = 'none';
         } catch (err2) {
           // Receive-only — show browser banner so they can send from browser
           log('Viewing call (open in browser to talk) — error: ' + err2.name + ': ' + err2.message, true);
@@ -448,6 +451,87 @@ export class CallPanel {
 
     openBrowserBtn.addEventListener('click', () => {
       vscode.postMessage({ type: 'openInBrowser' });
+    });
+
+    // ── Float (Picture-in-Picture) ─────────────────────────────────────
+
+    const floatBtn = document.getElementById('float-btn');
+    let pipWindow = null;
+
+    floatBtn.addEventListener('click', async () => {
+      // If already floating, close PiP and restore
+      if (pipWindow) {
+        pipWindow.close();
+        return;
+      }
+
+      // Document PiP — supports multiple video tiles (Chrome 116+ / Electron 27+)
+      if (window.documentPictureInPicture) {
+        try {
+          pipWindow = await window.documentPictureInPicture.requestWindow({
+            width: 340,
+            height: 260,
+            disallowReturnToOpener: false
+          });
+
+          // Copy styles into PiP document
+          const style = pipWindow.document.createElement('style');
+          style.textContent = \`
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { background: #1e1e1e; overflow: hidden; width: 100vw; height: 100vh; }
+            #video-grid {
+              width: 100%; height: 100%; display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+              gap: 4px; padding: 4px; align-content: start;
+            }
+            .video-tile {
+              position: relative; background: #000;
+              border-radius: 6px; overflow: hidden; aspect-ratio: 16/9;
+            }
+            .video-tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+            .tile-label {
+              position: absolute; bottom: 4px; left: 6px;
+              font-size: 10px; color: #fff;
+              text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-weight: 600;
+              font-family: 'Segoe UI', sans-serif;
+            }
+            .no-video {
+              width: 100%; height: 100%;
+              display: flex; align-items: center; justify-content: center;
+              background: #1a1a1a;
+            }
+            .avatar-circle {
+              width: 40px; height: 40px; border-radius: 50%;
+              display: flex; align-items: center; justify-content: center;
+              font-size: 16px; font-weight: 700; color: #fff;
+            }
+            .self-tile video { transform: scaleX(-1); }
+          \`;
+          pipWindow.document.head.appendChild(style);
+          pipWindow.document.body.style.cssText = 'margin:0;';
+
+          // Move the live video grid into PiP
+          pipWindow.document.body.appendChild(grid);
+          floatBtn.classList.add('active');
+          floatBtn.title = 'Return to panel';
+
+          // Restore grid when PiP is closed
+          pipWindow.addEventListener('pagehide', () => {
+            document.body.insertBefore(grid, controls);
+            pipWindow = null;
+            floatBtn.classList.remove('active');
+            floatBtn.title = 'Float video';
+          });
+        } catch (e) {
+          console.error('[PeerSync] PiP failed:', e);
+        }
+      } else {
+        // Fallback: standard single-video PiP
+        const video = grid.querySelector('video:not([muted])') || grid.querySelector('video');
+        if (video) {
+          try { await video.requestPictureInPicture(); } catch (e) { console.error(e); }
+        }
+      }
     });
 
   })();
