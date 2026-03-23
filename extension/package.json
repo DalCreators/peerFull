@@ -76,6 +76,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run bundle",
+    "postinstall": "npm run bundle",
     "compile": "tsc -p ./",
     "bundle": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:electron --external:@electron/remote --platform=node --format=cjs --sourcemap",
     "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:electron --external:@electron/remote --platform=node --format=cjs --sourcemap --watch",

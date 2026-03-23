@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { YjsSync } from '../sync/YjsSync';
+import { runFile } from '../runner/CodeRunner';
 import { ChatManager, ChatMessage } from '../chat/ChatManager';
 import { LicenseManager } from '../auth/LicenseManager';
 import { getSidebarHtml } from './panelHtml';
@@ -14,6 +15,7 @@ import { CallPanel } from '../call/CallPanel';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
+  private _stopRun?: () => void;
 
   constructor(
     private readonly _context: vscode.ExtensionContext,
@@ -41,11 +43,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.type) {
         case 'createRoom':
-          await this.createRoom();
+          await this.createRoom(msg.username);
           break;
 
         case 'joinRoom':
-          await this.joinRoom(msg.roomCode);
+          await this.joinRoom(msg.roomCode, msg.username);
           break;
 
         case 'leaveRoom':
@@ -89,6 +91,39 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           CallPanel.close();
           break;
 
+        case 'runCode': {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            this._post({ type: 'runOutput', chunk: 'No active file to run.\n', isError: true, done: true });
+            break;
+          }
+          // Save the file first
+          await editor.document.save();
+          const filePath = editor.document.uri.fsPath;
+          this._post({ type: 'runOutput', chunk: `▶ Running ${path.basename(filePath)}...\n`, isError: false, done: false });
+          this._yjsSync.broadcastRunOutput(`▶ Running ${path.basename(filePath)}...\n`, false, false);
+
+          this._stopRun?.();
+          this._stopRun = runFile(
+            filePath,
+            (chunk, isError) => {
+              this._post({ type: 'runOutput', chunk, isError, done: false });
+              this._yjsSync.broadcastRunOutput(chunk, isError, false);
+            },
+            () => {
+              this._post({ type: 'runOutput', chunk: '', isError: false, done: true });
+              this._yjsSync.broadcastRunOutput('', false, true);
+              this._stopRun = undefined;
+            }
+          );
+          break;
+        }
+
+        case 'stopRun':
+          this._stopRun?.();
+          this._stopRun = undefined;
+          break;
+
         case 'ready':
           // Webview finished loading — send initial state
           this._sendInitialState();
@@ -119,14 +154,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._yjsSync.onCallEvent((event) => {
       this._post({ type: 'callEvent', event });
     });
+
+    this._yjsSync.onRunOutput((data) => {
+      this._post({ type: 'runOutput', ...data });
+    });
   }
 
   // ─── Public API (called from commands) ───────────────────────────────────
 
-  async createRoom(): Promise<string | undefined> {
-    const username = this._getUsername();
+  async createRoom(username?: string): Promise<string | undefined> {
+    const name = username?.trim() || this._getUsername();
     const isPro = this._licenseManager.isPro();
-    const roomCode = await this._yjsSync.createRoom(username, isPro);
+    const roomCode = await this._yjsSync.createRoom(name, isPro);
     if (roomCode) {
       this._post({ type: 'roomJoined', roomCode, isHost: true, isPro });
       this._chatManager.connect(this._yjsSync.getSocket()!);
@@ -134,10 +173,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     return roomCode;
   }
 
-  async joinRoom(roomCode: string): Promise<void> {
-    const username = this._getUsername();
+  async joinRoom(roomCode: string, username?: string): Promise<void> {
+    const name = username?.trim() || this._getUsername();
     const isPro = this._licenseManager.isPro();
-    const success = await this._yjsSync.joinRoom(roomCode, username, isPro);
+    const success = await this._yjsSync.joinRoom(roomCode, name, isPro);
     if (success) {
       this._post({ type: 'roomJoined', roomCode, isHost: false, isPro });
       this._chatManager.connect(this._yjsSync.getSocket()!);

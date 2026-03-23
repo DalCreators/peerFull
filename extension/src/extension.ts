@@ -93,6 +93,24 @@ export function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+  // Warn if user tries to open a folder while in a room (it would reload the window and disconnect)
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      if (yjsSync.isInRoom()) {
+        vscode.window.showWarningMessage(
+          'PeerSync: Opening a new folder will reload VS Code and disconnect you from the room.',
+          'Rejoin Room'
+        ).then(action => {
+          if (action === 'Rejoin Room') {
+            const code = yjsSync.getRoomCode();
+            if (code) vscode.env.clipboard.writeText(code);
+            vscode.window.showInformationMessage(`Room code ${code} copied — paste it to rejoin after the folder opens.`);
+          }
+        });
+      }
+    })
+  );
 }
 
 export function deactivate() {

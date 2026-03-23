@@ -23,6 +23,7 @@ type UsersChangedCallback = (users: RemoteUser[]) => void;
 type SignalCallback = (peerId: string, signal: unknown) => void;
 type SessionWarningCallback = (secondsLeft: number) => void;
 type CallEventCallback = (event: { type: string; [key: string]: unknown }) => void;
+type RunOutputCallback = (data: { chunk: string; isError?: boolean; done?: boolean; username?: string }) => void;
 
 // Palette of cursor colors for participants
 const CURSOR_COLORS = [
@@ -49,6 +50,7 @@ export class YjsSync {
   private _signalCbs: SignalCallback[] = [];
   private _sessionWarningCbs: SessionWarningCallback[] = [];
   private _callEventCbs: CallEventCallback[] = [];
+  private _runOutputCbs: ((data: { chunk: string; isError?: boolean; done?: boolean; username?: string }) => void)[] = [];
 
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
@@ -101,7 +103,6 @@ export class YjsSync {
           this._initYjs();
 
           // Create a local temp folder mirroring the host's workspace
-          const folderName = response.folderName || `peersync-${roomCode}`;
           const tmpDir = path.join(os.tmpdir(), `peersync-${roomCode}`);
           fs.mkdirSync(tmpDir, { recursive: true });
 
@@ -113,13 +114,8 @@ export class YjsSync {
             fs.writeFileSync(absPath, content, 'utf8');
           }
 
-          // Add temp folder to workspace so it appears in the explorer
           const tmpUri = vscode.Uri.file(tmpDir);
           this._syncFolderUri = tmpUri;
-          vscode.workspace.updateWorkspaceFolders(
-            vscode.workspace.workspaceFolders?.length ?? 0, 0,
-            { uri: tmpUri, name: `PeerSync: ${folderName}` }
-          );
 
           this._startFileWatcher();
           resolve(true);
@@ -164,14 +160,6 @@ export class YjsSync {
         await vscode.window.tabGroups.close(tabsToClose);
       }
 
-      // Remove the folder from workspace
-      const folders = vscode.workspace.workspaceFolders;
-      if (folders) {
-        const idx = folders.findIndex(f => f.uri.fsPath === syncPath);
-        if (idx !== -1) {
-          vscode.workspace.updateWorkspaceFolders(idx, 1);
-        }
-      }
     }
     this._syncFolderUri = null;
   }
@@ -213,8 +201,14 @@ export class YjsSync {
 
     this._editor = editor;
 
+    // Compute path relative to the sync folder so host and joiner use the same Yjs key.
+    // vscode.workspace.asRelativePath prepends the workspace folder name when there are
+    // multiple folders, which breaks key matching between host and joiner.
+    const fileKey = this._syncFolderUri
+      ? path.relative(this._syncFolderUri.fsPath, editor.document.uri.fsPath)
+      : vscode.workspace.asRelativePath(editor.document.uri);
+
     // Tell everyone which file we just opened
-    const fileKey = vscode.workspace.asRelativePath(editor.document.uri);
     this._socket?.emit('file-focus', { roomCode: this._roomCode, relativePath: fileKey });
 
     // Each file gets its own YText keyed by relative path
@@ -304,6 +298,13 @@ export class YjsSync {
   onSignal(cb: SignalCallback) { this._signalCbs.push(cb); }
   onSessionWarning(cb: SessionWarningCallback) { this._sessionWarningCbs.push(cb); }
   onCallEvent(cb: CallEventCallback) { this._callEventCbs.push(cb); }
+  onRunOutput(cb: (data: { chunk: string; isError?: boolean; done?: boolean; username?: string }) => void) {
+    this._runOutputCbs.push(cb);
+  }
+
+  broadcastRunOutput(chunk: string, isError: boolean, done: boolean) {
+    this._socket?.emit('run-output', { roomCode: this._roomCode, chunk, isError, done });
+  }
 
   joinCall(isPanel = false) { this._socket?.emit('call-join', { roomCode: this._roomCode, isPanel }); }
   leaveCall() { this._socket?.emit('call-leave', { roomCode: this._roomCode }); }
@@ -395,6 +396,10 @@ export class YjsSync {
       setTimeout(() => this._remoteCreatedFiles.delete(folderUri.fsPath), 500);
     });
 
+    this._socket.on('run-output', (data: { chunk: string; isError?: boolean; done?: boolean; username?: string }) => {
+      this._runOutputCbs.forEach(cb => cb(data));
+    });
+
     this._socket.on('disconnect', () => {
       this._cleanupDecorations();
     });
@@ -423,30 +428,60 @@ export class YjsSync {
   private _renderRemoteCursor(data: { userId: string; username?: string; color: string; position: number; length: number }) {
     if (!this._editor) return;
 
-    // Dispose old decoration for this user
+    // Dispose old decorations for this user
     const old = this._cursors.get(data.userId);
     old?.dispose();
 
     const label = data.username ?? data.userId.slice(0, 6);
-    const decorationType = vscode.window.createTextEditorDecorationType({
+    const doc = this._editor.document;
+    const startPos = doc.positionAt(data.position);
+
+    // For the name tag to render, `after` needs a non-empty range.
+    // If there's no selection, extend to the next character on the line.
+    // If at end of line/file, keep it as-is (VS Code renders `after` on empty lines too).
+    let endPos = doc.positionAt(data.position + data.length);
+    if (data.length === 0) {
+      const line = doc.lineAt(startPos.line);
+      if (startPos.character < line.text.length) {
+        endPos = new vscode.Position(startPos.line, startPos.character + 1);
+      }
+    }
+
+    // Cursor bar — thin colored line on the left edge
+    const cursorDecoration = vscode.window.createTextEditorDecorationType({
       borderWidth: '0 0 0 2px',
       borderStyle: 'solid',
       borderColor: data.color,
-      backgroundColor: `${data.color}22`,
-      before: {
+      // Name tag floats after the cursor position
+      after: {
         contentText: ` ${label} `,
         backgroundColor: data.color,
         color: '#ffffff',
-        fontWeight: 'bold',
-        margin: '0 4px 0 0',
+        fontWeight: '600',
+        margin: '0 0 0 4px',
       }
     });
-    this._cursors.set(data.userId, decorationType);
 
-    const doc = this._editor.document;
-    const startPos = doc.positionAt(data.position);
-    const endPos = doc.positionAt(data.position + data.length);
-    this._editor.setDecorations(decorationType, [new vscode.Range(startPos, endPos)]);
+    // Selection highlight (only when text is actually selected)
+    const selectionDecoration = vscode.window.createTextEditorDecorationType({
+      backgroundColor: `${data.color}33`,
+    });
+
+    this._cursors.set(data.userId, cursorDecoration);
+
+    this._editor.setDecorations(cursorDecoration, [new vscode.Range(startPos, endPos)]);
+
+    // Apply selection highlight separately if there's an actual selection
+    if (data.length > 0) {
+      this._editor.setDecorations(selectionDecoration, [new vscode.Range(startPos, doc.positionAt(data.position + data.length))]);
+    }
+
+    // Clean up the selection decoration alongside the cursor decoration
+    const originalDispose = cursorDecoration.dispose.bind(cursorDecoration);
+    (cursorDecoration as any).dispose = () => {
+      originalDispose();
+      selectionDecoration.dispose();
+    };
   }
 
   private _cleanupDecorations() {

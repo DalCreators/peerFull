@@ -235,6 +235,19 @@ io.on('connection', (socket: Socket) => {
     socket.to(data.roomCode).emit('call-peer-left', { peerId: socket.id });
   });
 
+  // ── Shared code run output ───────────────────────────────────────────
+  socket.on('run-output', (data: { roomCode: string; chunk: string; isError?: boolean; done?: boolean }) => {
+    const room = roomManager.getRoom(data.roomCode);
+    if (!room) return;
+    const user = room.users.get(socket.id);
+    io.to(data.roomCode).emit('run-output', {
+      chunk: data.chunk,
+      isError: data.isError,
+      done: data.done,
+      username: user?.username
+    });
+  });
+
   // ── WebRTC signaling ─────────────────────────────────────────────────
   socket.on('webrtc-signal', (data: { to: string; signal: unknown }) => {
     // Forward signal to the target peer
