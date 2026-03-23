@@ -109,12 +109,15 @@ export function getCallPageHtml(): string {
     const isMinimal = params.get('minimal') === '1';
     document.getElementById('room-tag').textContent = 'Room: ' + roomCode;
 
-    // ── Minimal mode — background media engine, all controls from VS Code ─
+    // ── Minimal mode — shows only self-preview, all controls from VS Code ─
     if (isMinimal) {
       document.body.style.cssText =
-        'background:#111;color:#555;display:flex;align-items:center;justify-content:center;' +
-        'height:100vh;font-size:11px;font-family:"Segoe UI",sans-serif;user-select:none;';
-      document.body.innerHTML = '<span>🎙 PeerSync media engine — minimise me</span>';
+        'background:#000;margin:0;overflow:hidden;width:100vw;height:100vh;' +
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;';
+      document.body.innerHTML =
+        '<div id="mini-status" style="color:#888;font-size:11px;font-family:\'Segoe UI\',sans-serif;">Connecting…</div>' +
+        '<video id="mini-self" autoplay playsinline muted ' +
+          'style="display:none;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);border-radius:6px;"></video>';
     }
 
     const socket = io();
@@ -221,8 +224,20 @@ export function getCallPageHtml(): string {
       socket.emit('call-join-voice', { roomCode, username }, (res) => {
         if (res && res.error) { showError(res.error); return; }
         log('In call');
-        controls.style.display = 'flex';
-        addTile('__me__', username, localStream, true);
+
+        if (isMinimal) {
+          // Show self-camera preview in the mini window
+          const miniStatus = document.getElementById('mini-status');
+          const miniSelf   = document.getElementById('mini-self');
+          if (miniStatus) miniStatus.style.display = 'none';
+          if (miniSelf && localStream) {
+            miniSelf.srcObject = localStream;
+            miniSelf.style.display = 'block';
+          }
+        } else {
+          controls.style.display = 'flex';
+          addTile('__me__', username, localStream, true);
+        }
 
         // Process any events that arrived before stream was ready
         pendingPeers.forEach(({ peerId, username: u }) => { peerUsernames[peerId] = u; initiatePeer(peerId); });

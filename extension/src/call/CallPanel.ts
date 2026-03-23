@@ -383,7 +383,8 @@ export class CallPanel {
 
     function startPanel() {
       log('In call 🎙');
-      // mic/cam handled by the companion mini-browser window
+      // Show local "You" placeholder — camera is in the companion mini-browser window
+      addTile('__me__', username + ' (you)', null, true);
       pendingSignals.forEach(({ peerId, signal }) => _applySignal(peerId, signal));
       pendingSignals = [];
     }
