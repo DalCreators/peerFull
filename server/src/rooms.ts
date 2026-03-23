@@ -66,9 +66,12 @@ export class Room {
   }
 }
 
+const ROOM_TTL_MS = 2 * 60 * 1000; // 2 minutes grace period before empty rooms are deleted
+
 export class RoomManager {
   private _rooms = new Map<string, Room>();
   private _userRoomIndex = new Map<string, string>(); // userId -> roomCode
+  private _deleteTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   createRoom(hostId: string, hostUsername: string, isPro: boolean): Room {
     const code = this._generateCode();
@@ -85,6 +88,12 @@ export class RoomManager {
   addUser(roomCode: string, userId: string, username: string): User | undefined {
     const room = this._rooms.get(roomCode.toUpperCase());
     if (!room) return undefined;
+    // Cancel any pending deletion now that someone is joining
+    const existing = this._deleteTimers.get(roomCode.toUpperCase());
+    if (existing) {
+      clearTimeout(existing);
+      this._deleteTimers.delete(roomCode.toUpperCase());
+    }
     const user = room.addUser(userId, username);
     this._userRoomIndex.set(userId, roomCode.toUpperCase());
     return user;
@@ -96,9 +105,15 @@ export class RoomManager {
     room.removeUser(userId);
     this._userRoomIndex.delete(userId);
 
-    // Clean up empty rooms to free memory
+    // Give the room a grace period before deleting so brief disconnects don't kill it
     if (room.isEmpty) {
-      this._rooms.delete(roomCode.toUpperCase());
+      const timer = setTimeout(() => {
+        if (room.isEmpty) {
+          this._rooms.delete(roomCode.toUpperCase());
+          this._deleteTimers.delete(roomCode.toUpperCase());
+        }
+      }, ROOM_TTL_MS);
+      this._deleteTimers.set(roomCode.toUpperCase(), timer);
     }
   }
 

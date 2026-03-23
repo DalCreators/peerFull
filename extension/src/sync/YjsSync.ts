@@ -88,48 +88,65 @@ export class YjsSync {
     const serverUrl = this._getServerUrl();
     this._isHost = false;
 
+    // Disconnect any existing socket before creating a new one
+    if (this._socket) {
+      this._socket.disconnect();
+      this._socket = null;
+    }
+
     return new Promise((resolve) => {
+      let resolved = false;
+      const safeResolve = (val: boolean) => {
+        if (!resolved) { resolved = true; resolve(val); }
+      };
+
       this._connect(serverUrl, username);
+
       this._socket!.once('connect_error', (err) => {
         vscode.window.showErrorMessage(`PeerSync: Cannot reach server at ${serverUrl} — ${err.message}`);
-        resolve(false);
+        safeResolve(false);
       });
-      this._socket!.emit('join-room', { roomCode, username, isPro }, async (response: {
-        success?: boolean; error?: string; initialContent?: string;
-        folderName?: string; snapshot?: Record<string, string>;
-      }) => {
-        if (response.success) {
-          this._roomCode = roomCode;
-          this._initYjs();
 
-          // Create a local temp folder mirroring the host's workspace
-          const tmpDir = path.join(os.tmpdir(), `peersync-${roomCode}`);
-          fs.mkdirSync(tmpDir, { recursive: true });
+      // Wait for connection before emitting join-room
+      this._socket!.once('connect', () => {
+        this._socket!.emit('join-room', { roomCode, username, isPro }, async (response: {
+          success?: boolean; error?: string; initialContent?: string;
+          folderName?: string; snapshot?: Record<string, string>;
+        }) => {
+          if (response.success) {
+            this._roomCode = roomCode;
+            this._initYjs();
 
-          // Write all snapshot files into the temp folder
-          const snapshot = response.snapshot || {};
-          for (const [relPath, content] of Object.entries(snapshot)) {
-            const absPath = path.join(tmpDir, relPath);
-            fs.mkdirSync(path.dirname(absPath), { recursive: true });
-            fs.writeFileSync(absPath, content, 'utf8');
+            // Create a local temp folder mirroring the host's workspace
+            const tmpDir = path.join(os.tmpdir(), `peersync-${roomCode}`);
+            fs.mkdirSync(tmpDir, { recursive: true });
+
+            // Write all snapshot files into the temp folder
+            const snapshot = response.snapshot || {};
+            for (const [relPath, content] of Object.entries(snapshot)) {
+              const absPath = path.join(tmpDir, relPath);
+              fs.mkdirSync(path.dirname(absPath), { recursive: true });
+              fs.writeFileSync(absPath, content, 'utf8');
+            }
+
+            const tmpUri = vscode.Uri.file(tmpDir);
+            this._syncFolderUri = tmpUri;
+
+            this._startFileWatcher();
+
+            // Open the first snapshot file so the joiner sees something immediately
+            const firstFile = Object.keys(snapshot)[0];
+            if (firstFile) {
+              const fileUri = vscode.Uri.file(path.join(tmpDir, firstFile));
+              vscode.window.showTextDocument(fileUri, { preview: false }).then(() => {}, () => {});
+            }
+
+            safeResolve(true);
+          } else {
+            vscode.window.showErrorMessage(`PeerSync: Room "${roomCode}" not found or is full.`);
+            safeResolve(false);
           }
-
-          const tmpUri = vscode.Uri.file(tmpDir);
-          this._syncFolderUri = tmpUri;
-
-          this._startFileWatcher();
-
-          // Open the first snapshot file so the joiner sees something immediately
-          const firstFile = Object.keys(snapshot)[0];
-          if (firstFile) {
-            const fileUri = vscode.Uri.file(path.join(tmpDir, firstFile));
-            vscode.window.showTextDocument(fileUri, { preview: false }).then(() => {}, () => {});
-          }
-
-          resolve(true);
-        } else {
-          resolve(false);
-        }
+        });
       });
     });
   }
