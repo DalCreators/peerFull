@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 
-export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri, socketUri: vscode.Uri): string {
+export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri, socketUri: vscode.Uri, simplePeerUri: vscode.Uri): string {
   const nonce = getNonce();
 
   const scriptUri = webview.asWebviewUri(
@@ -357,6 +357,8 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     </div>
   </div>
 
+  <script nonce="${nonce}" src="${socketUri}"></script>
+  <script nonce="${nonce}" src="${simplePeerUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

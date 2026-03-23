@@ -13,6 +13,119 @@
   let inCall = false;
   let callPeers = {};
 
+  // ── PiP / WebRTC (runs inside sidebar webview, no separate tab needed) ──
+  var ICE_CONFIG = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ]
+  };
+  var pipCanvas = document.createElement('canvas');
+  pipCanvas.width = 640; pipCanvas.height = 360;
+  var pipCtx = pipCanvas.getContext('2d');
+  var pipVideoEl = null;
+  var pipRafId = null;
+  var pipActive = false;
+  var remoteStreams = {}; // peerId -> MediaStream
+
+  function _drawPip() {
+    var streams = Object.values(remoteStreams);
+    pipCtx.fillStyle = '#111';
+    pipCtx.fillRect(0, 0, 640, 360);
+    if (streams.length > 0) {
+      var cols = Math.ceil(Math.sqrt(streams.length));
+      var rows = Math.ceil(streams.length / cols);
+      var w = 640 / cols, h = 360 / rows;
+      streams.forEach(function(s, i) {
+        var v = s._pipVideo;
+        if (v && v.readyState >= 2) {
+          try { pipCtx.drawImage(v, (i % cols) * w, Math.floor(i / cols) * h, w, h); } catch(_) {}
+        }
+      });
+    }
+    pipRafId = requestAnimationFrame(_drawPip);
+  }
+
+  function _enterPip() {
+    if (pipActive || !document.pictureInPictureEnabled) return;
+    pipActive = true;
+    _drawPip();
+    pipVideoEl = document.createElement('video');
+    pipVideoEl.muted = true;
+    pipVideoEl.srcObject = pipCanvas.captureStream(25);
+    pipVideoEl.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;';
+    document.body.appendChild(pipVideoEl);
+    pipVideoEl.play().then(function() {
+      return pipVideoEl.requestPictureInPicture();
+    }).then(function() {
+      pipVideoEl.addEventListener('leavepictureinpicture', function() {
+        setTimeout(function() {
+          if (pipVideoEl) pipVideoEl.requestPictureInPicture().catch(function(){});
+        }, 300);
+      });
+    }).catch(function() { pipActive = false; });
+  }
+
+  function _exitPip() {
+    if (pipRafId) { cancelAnimationFrame(pipRafId); pipRafId = null; }
+    if (document.pictureInPictureElement) document.exitPictureInPicture().catch(function(){});
+    if (pipVideoEl) { pipVideoEl.remove(); pipVideoEl = null; }
+    pipActive = false;
+    Object.keys(remoteStreams).forEach(function(k) {
+      var s = remoteStreams[k];
+      if (s._pipVideo) s._pipVideo.remove();
+    });
+    remoteStreams = {};
+  }
+
+  function _attachStream(peerId, stream) {
+    // Create a hidden video element to decode the stream for canvas drawing
+    var v = document.createElement('video');
+    v.autoplay = true; v.playsInline = true; v.muted = true;
+    v.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;';
+    v.srcObject = stream;
+    v.play().catch(function(){});
+    document.body.appendChild(v);
+    stream._pipVideo = v;
+    remoteStreams[peerId] = stream;
+    if (!pipActive) _enterPip();
+  }
+
+  function _setupCallPeer(peerId, peer) {
+    callPeers[peerId] = peer;
+    peer.on('signal', function(data) {
+      vscode.postMessage({ type: 'webrtcSignal', peerId: peerId, signal: data });
+    });
+    peer.on('stream', function(stream) { _attachStream(peerId, stream); });
+    peer.on('track', function(track, stream) {
+      if (track.kind === 'video') _attachStream(peerId, stream);
+    });
+    peer.on('connect', function() { if (!pipActive) _enterPip(); });
+    peer.on('close', function() {
+      if (remoteStreams[peerId] && remoteStreams[peerId]._pipVideo) {
+        remoteStreams[peerId]._pipVideo.remove();
+      }
+      delete remoteStreams[peerId];
+      delete callPeers[peerId];
+    });
+    peer.on('error', function() {
+      if (remoteStreams[peerId] && remoteStreams[peerId]._pipVideo) {
+        remoteStreams[peerId]._pipVideo.remove();
+      }
+      delete remoteStreams[peerId];
+      delete callPeers[peerId];
+    });
+  }
+
+  function _applyCallSignal(peerId, signal) {
+    if (!callPeers[peerId]) {
+      var peer = new SimplePeer({ initiator: false, trickle: true, config: ICE_CONFIG });
+      _setupCallPeer(peerId, peer);
+    }
+    try { callPeers[peerId].signal(signal); } catch(_) {}
+  }
+
   // DOM refs
   const lobby             = document.getElementById('lobby');
   const roomView          = document.getElementById('room-view');
@@ -66,6 +179,35 @@
 
       case 'roomLeft':
         _showLobby();
+        break;
+
+      case 'startCall':
+        inCall = true;
+        _enterPip();
+        break;
+
+      case 'stopCall':
+        inCall = false;
+        _exitPip();
+        Object.keys(callPeers).forEach(function(id) {
+          try { callPeers[id].destroy(); } catch(_) {}
+          delete callPeers[id];
+        });
+        break;
+
+      case 'webrtcSignal':
+        _applyCallSignal(msg.peerId, msg.signal);
+        break;
+
+      case 'callPeerLeft':
+        if (callPeers[msg.peerId]) {
+          try { callPeers[msg.peerId].destroy(); } catch(_) {}
+          delete callPeers[msg.peerId];
+        }
+        if (remoteStreams[msg.peerId]) {
+          if (remoteStreams[msg.peerId]._pipVideo) remoteStreams[msg.peerId]._pipVideo.remove();
+          delete remoteStreams[msg.peerId];
+        }
         break;
 
       case 'usersChanged':

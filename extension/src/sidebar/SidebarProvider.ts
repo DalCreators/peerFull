@@ -11,7 +11,6 @@ import { runFile } from '../runner/CodeRunner';
 import { ChatManager, ChatMessage } from '../chat/ChatManager';
 import { LicenseManager } from '../auth/LicenseManager';
 import { getSidebarHtml } from './panelHtml';
-import { CallPanel } from '../call/CallPanel';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
@@ -37,7 +36,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const socketUri = webviewView.webview.asWebviewUri(
       vscode.Uri.joinPath(this._context.extensionUri, 'media', 'socket.io.min.js')
     );
-    webviewView.webview.html = getSidebarHtml(webviewView.webview, this._context.extensionUri, socketUri);
+    const simplePeerUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._context.extensionUri, 'media', 'simplepeer.min.js')
+    );
+    webviewView.webview.html = getSidebarHtml(webviewView.webview, this._context.extensionUri, socketUri, simplePeerUri);
+
+    // Forward WebRTC signals and call events into the sidebar webview
+    this._yjsSync.onSignal((peerId, signal) => {
+      this._post({ type: 'webrtcSignal', peerId, signal });
+    });
+    this._yjsSync.onCallEvent((event) => {
+      if (event.type === 'callPeerLeft') {
+        this._post({ type: 'callPeerLeft', peerId: (event as any).peerId });
+      }
+    });
 
     // Handle messages sent from the webview
     webviewView.webview.onDidReceiveMessage(async (msg) => {
@@ -83,8 +95,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           const username = this._getUsername();
           if (roomCode) {
             const serverUrl = this._yjsSync.getServerUrl();
-            const callUrl = `${serverUrl}/call/${roomCode}?u=${encodeURIComponent(username)}`;
-            CallPanel.open(this._context, this._yjsSync, roomCode, username);
+            const callUrl = `${serverUrl}/call/${roomCode}?u=${encodeURIComponent(username)}&minimal=1`;
+            // No VS Code tab — PiP runs inside the sidebar webview
+            this._yjsSync.joinCall(true);
+            this._post({ type: 'startCall', username });
             openMinimalCallBrowser(callUrl);
           }
           break;
@@ -92,7 +106,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
         case 'leaveCall':
           this._yjsSync.forceEndCall();
-          CallPanel.close();
+          this._post({ type: 'stopCall' });
           break;
 
         case 'shareFile':
@@ -196,7 +210,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   leaveRoom(): void {
-    CallPanel.close();
+    this._yjsSync.forceEndCall();
+    this._post({ type: 'stopCall' });
     this._yjsSync.disconnect().then(() => {
       this._post({ type: 'roomLeft' });
     });
