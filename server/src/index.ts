@@ -214,6 +214,11 @@ io.on('connection', (socket: Socket) => {
     socket.to(data.roomCode).emit('call-peer-left', { peerId: socket.id });
   });
 
+  // ── Force-end call (extension closing → close any open browser tabs) ─
+  socket.on('call-force-end', (data: { roomCode: string }) => {
+    socket.to(data.roomCode).emit('call-force-end');
+  });
+
   // ── Voice-only join (browser tab, not a full room member) ────────────
   socket.on('call-join-voice', (data: { roomCode: string; username: string }, callback) => {
     const room = roomManager.getRoom(data.roomCode);

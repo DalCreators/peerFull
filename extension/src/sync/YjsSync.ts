@@ -347,6 +347,7 @@ export class YjsSync {
 
   joinCall(isPanel = false) { this._socket?.emit('call-join', { roomCode: this._roomCode, isPanel }); }
   leaveCall() { this._socket?.emit('call-leave', { roomCode: this._roomCode }); }
+  forceEndCall() { this._socket?.emit('call-force-end', { roomCode: this._roomCode }); }
 
   // ── Private helpers ───────────────────────────────────────────────────
 

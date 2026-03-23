@@ -59,7 +59,7 @@ export class CallPanel {
       switch (msg.type) {
         case 'ready':
           this._panel.webview.postMessage({ type: 'start' });
-          // Join as panel (receive-only) — server tells browsers to initiate toward us
+          // Join as panel — server tells browser tabs to initiate WebRTC toward us
           yjsSync.joinCall(true);
           break;
         case 'webrtcSignal':
@@ -67,14 +67,19 @@ export class CallPanel {
           break;
         case 'leaveCall':
           yjsSync.leaveCall();
+          yjsSync.forceEndCall();
           this._dispose();
           break;
-        case 'openInBrowser': {
-          const serverUrl = yjsSync.getServerUrl();
-          const callUrl = `${serverUrl}/call/${roomCode}?u=${encodeURIComponent(username)}`;
-          vscode.env.openExternal(vscode.Uri.parse(callUrl));
+        case 'permissionDenied':
+          vscode.window.showInformationMessage(
+            'PeerSync: Grant camera/microphone access to VS Code or Cursor in System Preferences → Privacy & Security.',
+            'Open Privacy Settings'
+          ).then(choice => {
+            if (choice === 'Open Privacy Settings') {
+              vscode.env.openExternal(vscode.Uri.parse('x-apple.systempreferences:com.apple.preference.security?Privacy_Camera'));
+            }
+          });
           break;
-        }
       }
     });
 
@@ -193,31 +198,13 @@ export class CallPanel {
     }
     .ctrl-btn:hover { filter: brightness(1.2); }
     .ctrl-btn.off { background: #dc2626; }
-    .ctrl-btn.active { background: #7c3aed; color: #fff; }
     #leave-btn { background: #dc2626; color: #fff; }
     #mic-btn, #cam-btn { display: none; }
 
-    /* ── Browser fallback banner ── */
-    #browser-banner {
-      display: none; align-items: center; justify-content: center;
-      gap: 8px; padding: 6px 12px; font-size: 11px;
-      background: rgba(124,58,237,0.15);
-      border-bottom: 1px solid rgba(124,58,237,0.3); flex-shrink: 0;
-    }
-    #open-browser-btn {
-      padding: 3px 10px; border: none; border-radius: 4px;
-      background: #7c3aed; color: #fff; cursor: pointer; font-size: 11px;
-    }
   </style>
 </head>
 <body>
   <div id="statusbar">Initialising…</div>
-
-  <!-- shown when mic/cam denied, prompting browser tab -->
-  <div id="browser-banner">
-    <span>Mic/camera not available in this window.</span>
-    <button id="open-browser-btn">Open in browser to talk</button>
-  </div>
 
   <div id="video-grid"></div>
 
@@ -229,7 +216,6 @@ export class CallPanel {
   <div id="controls">
     <button class="ctrl-btn" id="mic-btn" title="Mute">🎤</button>
     <button class="ctrl-btn" id="cam-btn" title="Camera off">📷</button>
-    <button class="ctrl-btn" id="float-btn" title="Float video">⧉</button>
     <button class="ctrl-btn" id="leave-btn" title="Leave">📵</button>
   </div>
 
@@ -251,11 +237,9 @@ export class CallPanel {
     const grid       = document.getElementById('video-grid');
     const empty      = document.getElementById('empty');
     const controls   = document.getElementById('controls');
-    const micBtn     = document.getElementById('mic-btn');
-    const camBtn     = document.getElementById('cam-btn');
-    const leaveBtn   = document.getElementById('leave-btn');
-    const browserBanner   = document.getElementById('browser-banner');
-    const openBrowserBtn  = document.getElementById('open-browser-btn');
+    const micBtn   = document.getElementById('mic-btn');
+    const camBtn   = document.getElementById('cam-btn');
+    const leaveBtn = document.getElementById('leave-btn');
 
     function log(msg, isError) {
       statusbar.textContent = msg;
@@ -281,6 +265,9 @@ export class CallPanel {
       label.textContent = name + (isSelf ? ' (you)' : '');
       tile.appendChild(label);
       grid.appendChild(tile);
+
+      // Auto-enter PiP on first tile
+      if (!pipActive) enterPip();
     }
 
     function _setTileContent(tile, stream, isSelf) {
@@ -330,30 +317,86 @@ export class CallPanel {
 
     vscode.postMessage({ type: 'ready' });
 
+    // ── Picture-in-Picture (canvas composite, works on Mac + Windows) ────
+
+    const pipCanvas = document.createElement('canvas');
+    pipCanvas.width = 640; pipCanvas.height = 360;
+    const pipCtx = pipCanvas.getContext('2d');
+    let pipVideo = null;
+    let pipRafId = null;
+    let pipActive = false;
+
+    function drawPipFrame() {
+      const videos = [...grid.querySelectorAll('video')];
+      pipCtx.fillStyle = '#111';
+      pipCtx.fillRect(0, 0, 640, 360);
+      if (videos.length > 0) {
+        const cols = Math.ceil(Math.sqrt(videos.length));
+        const rows = Math.ceil(videos.length / cols);
+        const w = 640 / cols, h = 360 / rows;
+        videos.forEach((v, i) => {
+          try { pipCtx.drawImage(v, (i % cols) * w, Math.floor(i / cols) * h, w, h); } catch(_) {}
+        });
+      }
+      pipRafId = requestAnimationFrame(drawPipFrame);
+    }
+
+    async function enterPip() {
+      if (pipActive || !document.pictureInPictureEnabled) return;
+      pipActive = true;
+      drawPipFrame();
+      pipVideo = document.createElement('video');
+      pipVideo.muted = true;
+      pipVideo.srcObject = pipCanvas.captureStream(25);
+      pipVideo.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;';
+      document.body.appendChild(pipVideo);
+      try {
+        await pipVideo.play();
+        await pipVideo.requestPictureInPicture();
+        // Re-enter PiP if user closes it — call should always float
+        pipVideo.addEventListener('leavepictureinpicture', () => {
+          setTimeout(() => {
+            if (!pipVideo) return;
+            pipVideo.requestPictureInPicture().catch(() => {});
+          }, 300);
+        });
+      } catch(e) {
+        console.error('[PeerSync] PiP failed:', e.name, e.message);
+        pipActive = false;
+      }
+    }
+
+    function exitPip() {
+      if (pipRafId) { cancelAnimationFrame(pipRafId); pipRafId = null; }
+      if (document.pictureInPictureElement) { document.exitPictureInPicture().catch(() => {}); }
+      pipVideo?.remove(); pipVideo = null; pipActive = false;
+    }
+
     async function startPanel() {
       log('Joining call…');
 
-      // Try to get camera+mic (works in VS Code, not Cursor)
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         log('In call 🎙');
         micBtn.style.display = 'flex';
         camBtn.style.display = 'flex';
         addTile('__me__', username, localStream, true);
-      } catch (_) {
+      } catch (e1) {
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           log('In call (audio only) 🎙');
           micBtn.style.display = 'flex';
           addTile('__me__', username, localStream, true);
-        } catch (err2) {
-          // Receive-only — show browser banner so they can send from browser
-          log('Viewing call (open in browser to talk) — error: ' + err2.name + ': ' + err2.message, true);
-          browserBanner.style.display = 'flex';
+        } catch (e2) {
+          if (e2.name === 'NotAllowedError' || e2.name === 'PermissionDeniedError') {
+            log('Camera/mic blocked — check notification', true);
+            vscode.postMessage({ type: 'permissionDenied' });
+          } else {
+            log('No mic/cam — viewing only');
+          }
         }
       }
 
-      // Process signals that arrived during getUserMedia
       pendingSignals.forEach(({ peerId, signal }) => _applySignal(peerId, signal));
       pendingSignals = [];
     }
@@ -444,94 +487,10 @@ export class CallPanel {
     });
 
     leaveBtn.addEventListener('click', () => {
+      exitPip();
       localStream?.getTracks().forEach(t => t.stop());
       Object.values(peers).forEach(p => { try { p.destroy(); } catch(_) {} });
       vscode.postMessage({ type: 'leaveCall' });
-    });
-
-    openBrowserBtn.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openInBrowser' });
-    });
-
-    // ── Float (Picture-in-Picture) ─────────────────────────────────────
-
-    const floatBtn = document.getElementById('float-btn');
-    let pipWindow = null;
-
-    floatBtn.addEventListener('click', async () => {
-      // If already floating, close PiP and restore
-      if (pipWindow) {
-        pipWindow.close();
-        return;
-      }
-
-      // Document PiP — supports multiple video tiles (Chrome 116+ / Electron 27+)
-      if (window.documentPictureInPicture) {
-        try {
-          pipWindow = await window.documentPictureInPicture.requestWindow({
-            width: 340,
-            height: 260,
-            disallowReturnToOpener: false
-          });
-
-          // Copy styles into PiP document
-          const style = pipWindow.document.createElement('style');
-          style.textContent = \`
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { background: #1e1e1e; overflow: hidden; width: 100vw; height: 100vh; }
-            #video-grid {
-              width: 100%; height: 100%; display: grid;
-              grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-              gap: 4px; padding: 4px; align-content: start;
-            }
-            .video-tile {
-              position: relative; background: #000;
-              border-radius: 6px; overflow: hidden; aspect-ratio: 16/9;
-            }
-            .video-tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
-            .tile-label {
-              position: absolute; bottom: 4px; left: 6px;
-              font-size: 10px; color: #fff;
-              text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-weight: 600;
-              font-family: 'Segoe UI', sans-serif;
-            }
-            .no-video {
-              width: 100%; height: 100%;
-              display: flex; align-items: center; justify-content: center;
-              background: #1a1a1a;
-            }
-            .avatar-circle {
-              width: 40px; height: 40px; border-radius: 50%;
-              display: flex; align-items: center; justify-content: center;
-              font-size: 16px; font-weight: 700; color: #fff;
-            }
-            .self-tile video { transform: scaleX(-1); }
-          \`;
-          pipWindow.document.head.appendChild(style);
-          pipWindow.document.body.style.cssText = 'margin:0;';
-
-          // Move the live video grid into PiP
-          pipWindow.document.body.appendChild(grid);
-          floatBtn.classList.add('active');
-          floatBtn.title = 'Return to panel';
-
-          // Restore grid when PiP is closed
-          pipWindow.addEventListener('pagehide', () => {
-            document.body.insertBefore(grid, controls);
-            pipWindow = null;
-            floatBtn.classList.remove('active');
-            floatBtn.title = 'Float video';
-          });
-        } catch (e) {
-          console.error('[PeerSync] PiP failed:', e);
-        }
-      } else {
-        // Fallback: standard single-video PiP
-        const video = grid.querySelector('video:not([muted])') || grid.querySelector('video');
-        if (video) {
-          try { await video.requestPictureInPicture(); } catch (e) { console.error(e); }
-        }
-      }
     });
 
   })();

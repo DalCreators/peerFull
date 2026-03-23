@@ -80,17 +80,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
         case 'joinCall': {
           const roomCode = this._yjsSync.getRoomCode();
+          const username = this._getUsername();
           if (roomCode) {
-            const serverUrl = this._yjsSync.getServerUrl();
-            const username = this._getUsername();
-            const callUrl = `${serverUrl}/call/${roomCode}?u=${encodeURIComponent(username)}`;
-            vscode.env.openExternal(vscode.Uri.parse(callUrl));
+            CallPanel.open(this._context, this._yjsSync, roomCode, username);
           }
           break;
         }
 
         case 'leaveCall':
-          // Call runs in the browser — nothing to close on the extension side
+          this._yjsSync.forceEndCall();
+          CallPanel.close();
           break;
 
         case 'shareFile':

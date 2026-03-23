@@ -251,6 +251,12 @@ export function getCallPageHtml(): string {
       cleanupPeer(peerId); removeTile(peerId); log('Peer left');
     });
 
+    socket.on('call-force-end', () => {
+      localStream?.getTracks().forEach(t => t.stop());
+      Object.values(peers).forEach(p => { try { p.destroy(); } catch(_) {} });
+      window.close();
+    });
+
     socket.on('webrtc-signal', ({ from, signal }) => {
       if (!localStream) { pendingSignals.push({ peerId: from, signal }); return; }
       handleSignal(from, signal);
