@@ -109,21 +109,12 @@ export function getCallPageHtml(): string {
     const isMinimal = params.get('minimal') === '1';
     document.getElementById('room-tag').textContent = 'Room: ' + roomCode;
 
-    // ── Minimal mode — tiny floating mic/cam widget, no video grid ───────
+    // ── Minimal mode — background media engine, all controls from VS Code ─
     if (isMinimal) {
-      const header = document.getElementById('header');
-      const grid   = document.getElementById('video-grid');
-      if (header) header.style.display = 'none';
-      if (grid)   grid.style.display   = 'none';
       document.body.style.cssText =
-        'background:#1e1e1e;display:flex;flex-direction:column;' +
-        'align-items:center;justify-content:center;height:100vh;gap:14px;overflow:hidden;';
-      const badge = document.createElement('div');
-      badge.style.cssText = 'font-size:13px;color:#a78bfa;font-family:"Segoe UI",sans-serif;font-weight:600;';
-      badge.textContent   = '🎙 PeerSync — In Call';
-      document.body.insertBefore(badge, document.getElementById('controls'));
-      const ctrl = document.getElementById('controls');
-      if (ctrl) { ctrl.style.cssText = 'display:flex;gap:12px;border:none;background:transparent;padding:0;'; }
+        'background:#111;color:#555;display:flex;align-items:center;justify-content:center;' +
+        'height:100vh;font-size:11px;font-family:"Segoe UI",sans-serif;user-select:none;';
+      document.body.innerHTML = '<span>🎙 PeerSync media engine — minimise me</span>';
     }
 
     const socket = io();
@@ -273,6 +264,18 @@ export function getCallPageHtml(): string {
       localStream?.getTracks().forEach(t => t.stop());
       Object.values(peers).forEach(p => { try { p.destroy(); } catch(_) {} });
       window.close();
+    });
+
+    // VS Code panel controls mic/cam remotely
+    socket.on('call-media-control', ({ mic, cam }) => {
+      if (mic !== undefined) {
+        micOn = mic;
+        localStream?.getAudioTracks().forEach(t => { t.enabled = mic; });
+      }
+      if (cam !== undefined) {
+        camOn = cam;
+        localStream?.getVideoTracks().forEach(t => { t.enabled = cam; });
+      }
     });
 
     socket.on('webrtc-signal', ({ from, signal }) => {

@@ -219,6 +219,11 @@ io.on('connection', (socket: Socket) => {
     socket.to(data.roomCode).emit('call-force-end');
   });
 
+  // ── Media control (VS Code panel → mini browser mic/cam toggle) ───────
+  socket.on('call-media-control', (data: { roomCode: string; mic?: boolean; cam?: boolean }) => {
+    socket.to(data.roomCode).emit('call-media-control', { mic: data.mic, cam: data.cam });
+  });
+
   // ── Voice-only join (browser tab, not a full room member) ────────────
   socket.on('call-join-voice', (data: { roomCode: string; username: string }, callback) => {
     const room = roomManager.getRoom(data.roomCode);

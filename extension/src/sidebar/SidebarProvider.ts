@@ -258,6 +258,19 @@ function openMinimalCallBrowser(url: string): void {
       '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
       '/Applications/Chromium.app/Contents/MacOS/Chromium',
     ], () => vscode.env.openExternal(vscode.Uri.parse(url)));
+    // Minimise the Chrome window after it loads so it stays out of the way
+    setTimeout(() => {
+      cp.exec(
+        `osascript -e 'tell application "Google Chrome" to set miniaturized of front window to true'`,
+        () => {
+          // Fallback: try Edge
+          cp.exec(
+            `osascript -e 'tell application "Microsoft Edge" to set miniaturized of front window to true'`,
+            () => {}
+          );
+        }
+      );
+    }, 2500);
   } else if (process.platform === 'win32') {
     const local  = process.env['LOCALAPPDATA'] ?? '';
     const prog86 = process.env['ProgramFiles(x86)'] ?? process.env['ProgramFiles'] ?? '';

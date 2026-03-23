@@ -65,6 +65,9 @@ export class CallPanel {
         case 'webrtcSignal':
           yjsSync.forwardSignal(msg.peerId, msg.signal);
           break;
+        case 'mediaControl':
+          yjsSync.controlCallMedia(msg.mic, msg.cam);
+          break;
         case 'leaveCall':
           yjsSync.leaveCall();
           yjsSync.forceEndCall();
@@ -187,6 +190,7 @@ export class CallPanel {
       color: var(--vscode-foreground, #ccc); transition: background 0.15s;
     }
     .ctrl-btn:hover { filter: brightness(1.2); }
+    .ctrl-btn.off { background: #dc2626; color: #fff; }
     #leave-btn { background: #dc2626; color: #fff; }
     #pip-btn { position: relative; }
     #pip-btn.pulse::after {
@@ -213,6 +217,8 @@ export class CallPanel {
   </div>
 
   <div id="controls">
+    <button class="ctrl-btn" id="mic-btn" title="Mute mic">🎤</button>
+    <button class="ctrl-btn" id="cam-btn" title="Turn off camera">📷</button>
     <button class="ctrl-btn" id="pip-btn" title="Float video (Picture-in-Picture)">📺</button>
     <button class="ctrl-btn" id="leave-btn" title="Leave call">📵</button>
   </div>
@@ -232,8 +238,11 @@ export class CallPanel {
     const statusbar = document.getElementById('statusbar');
     const grid      = document.getElementById('video-grid');
     const empty     = document.getElementById('empty');
+    const micBtn    = document.getElementById('mic-btn');
+    const camBtn    = document.getElementById('cam-btn');
     const pipBtn    = document.getElementById('pip-btn');
     const leaveBtn  = document.getElementById('leave-btn');
+    let micOn = true, camOn = true;
 
     function log(msg, isError) {
       statusbar.textContent = msg;
@@ -444,6 +453,20 @@ export class CallPanel {
     }
 
     // ── Controls ──────────────────────────────────────────────────────
+
+    micBtn.addEventListener('click', () => {
+      micOn = !micOn;
+      micBtn.textContent = micOn ? '🎤' : '🔇';
+      micBtn.classList.toggle('off', !micOn);
+      vscode.postMessage({ type: 'mediaControl', mic: micOn });
+    });
+
+    camBtn.addEventListener('click', () => {
+      camOn = !camOn;
+      camBtn.textContent = camOn ? '📷' : '🚫';
+      camBtn.classList.toggle('off', !camOn);
+      vscode.postMessage({ type: 'mediaControl', cam: camOn });
+    });
 
     pipBtn.addEventListener('click', async () => {
       if (pipActive) {
