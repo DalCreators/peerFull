@@ -109,15 +109,20 @@ export function getCallPageHtml(): string {
     const isMinimal = params.get('minimal') === '1';
     document.getElementById('room-tag').textContent = 'Room: ' + roomCode;
 
-    // ── Minimal mode — shows only self-preview, all controls from VS Code ─
+    // ── Minimal mode — self-preview only, all controls come from VS Code ──
+    // We hide existing elements (keep them in DOM so log/showError still work)
+    // and add a small self-video on top.
+    const miniSelfVideo = document.createElement('video');
+    miniSelfVideo.autoplay = true; miniSelfVideo.playsInline = true; miniSelfVideo.muted = true;
+    miniSelfVideo.style.cssText =
+      'position:fixed;inset:0;width:100%;height:100%;object-fit:cover;' +
+      'transform:scaleX(-1);display:none;background:#000;';
     if (isMinimal) {
-      document.body.style.cssText =
-        'background:#000;margin:0;overflow:hidden;width:100vw;height:100vh;' +
-        'display:flex;flex-direction:column;align-items:center;justify-content:center;';
-      document.body.innerHTML =
-        '<div id="mini-status" style="color:#888;font-size:11px;font-family:\'Segoe UI\',sans-serif;">Connecting…</div>' +
-        '<video id="mini-self" autoplay playsinline muted ' +
-          'style="display:none;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);border-radius:6px;"></video>';
+      document.getElementById('header').style.display   = 'none';
+      document.getElementById('video-grid').style.display = 'none';
+      document.getElementById('controls').style.display  = 'none';
+      document.body.style.background = '#000';
+      document.body.appendChild(miniSelfVideo);
     }
 
     const socket = io();
@@ -226,13 +231,10 @@ export function getCallPageHtml(): string {
         log('In call');
 
         if (isMinimal) {
-          // Show self-camera preview in the mini window
-          const miniStatus = document.getElementById('mini-status');
-          const miniSelf   = document.getElementById('mini-self');
-          if (miniStatus) miniStatus.style.display = 'none';
-          if (miniSelf && localStream) {
-            miniSelf.srcObject = localStream;
-            miniSelf.style.display = 'block';
+          // Show self-camera preview fullscreen in the mini window
+          if (localStream) {
+            miniSelfVideo.srcObject = localStream;
+            miniSelfVideo.style.display = 'block';
           }
         } else {
           controls.style.display = 'flex';

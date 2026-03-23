@@ -236,6 +236,14 @@ export class CallPanel {
     let pendingSignals = [];
     let panelReady = false;
 
+    const ICE_CONFIG = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+      ]
+    };
+
     const statusbar = document.getElementById('statusbar');
     const grid      = document.getElementById('video-grid');
     const empty     = document.getElementById('empty');
@@ -416,11 +424,10 @@ export class CallPanel {
 
     function _applySignal(peerId, signal) {
       if (!peers[peerId]) {
-        // Non-initiator — we receive the stream from the browser
-        const peer = new SimplePeer({ initiator: false, trickle: true });
+        const peer = new SimplePeer({ initiator: false, trickle: true, config: ICE_CONFIG });
         _setupPeer(peerId, peer);
       }
-      peers[peerId].signal(signal);
+      try { peers[peerId].signal(signal); } catch(e) { console.error('[PeerSync signal]', e); }
     }
 
     function _setupPeer(peerId, peer) {
@@ -445,7 +452,7 @@ export class CallPanel {
       });
 
       peer.on('close', () => { cleanupPeer(peerId); removeTile(peerId); });
-      peer.on('error', e => { console.error('[PeerSync]', e); cleanupPeer(peerId); });
+      peer.on('error', e => { log('Connection error: ' + e.message, true); cleanupPeer(peerId); removeTile(peerId); });
     }
 
     function cleanupPeer(peerId) {
