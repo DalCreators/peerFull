@@ -79,10 +79,14 @@
     if (peerIds.length === 1) {
       // Direct stream into PiP — bypasses canvas, most reliable in Electron
       if (pipRafId) { cancelAnimationFrame(pipRafId); pipRafId = null; }
-      pipVideoEl.srcObject = remoteStreams[peerIds[0]];
+      var s = remoteStreams[peerIds[0]];
+      // Null-reset forces video element to reload stream and pick up newly added video tracks
+      pipVideoEl.srcObject = null;
+      pipVideoEl.srcObject = s;
       pipVideoEl.play().catch(function(){});
     } else {
       // Multiple peers: canvas composite
+      pipVideoEl.srcObject = null;
       pipVideoEl.srcObject = pipCanvas.captureStream(25);
       pipVideoEl.play().catch(function(){});
       if (!pipRafId) _drawPip();
@@ -124,10 +128,16 @@
     peer.on('signal', function(data) {
       vscode.postMessage({ type: 'webrtcSignal', peerId: peerId, signal: data });
     });
-    peer.on('stream', function(stream) { _attachStream(peerId, stream); });
-    peer.on('track', function(track, stream) {
-      if (track.kind === 'video') _attachStream(peerId, stream);
-    });
+    // Debounce: wait 150ms after last track so stream has both audio+video before attaching
+    var _trackTimer = null;
+    var _lastStream = null;
+    function _scheduleAttach(stream) {
+      _lastStream = stream;
+      if (_trackTimer) clearTimeout(_trackTimer);
+      _trackTimer = setTimeout(function() { _attachStream(peerId, _lastStream); }, 150);
+    }
+    peer.on('stream', function(stream) { _scheduleAttach(stream); });
+    peer.on('track', function(track, stream) { _scheduleAttach(stream); });
     peer.on('connect', function() { if (!pipActive) _enterPip(); });
     peer.on('close', function() {
       if (remoteStreams[peerId] && remoteStreams[peerId]._pipVideo) {
