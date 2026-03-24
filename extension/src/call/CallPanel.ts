@@ -13,6 +13,7 @@ export class CallPanel {
   private static _instance: CallPanel | undefined;
   private readonly _panel: vscode.WebviewPanel;
   private _disposed = false;
+  private _intentionalClose = false; // true = End Call button; false = X button (minimize)
 
   static open(
     context: vscode.ExtensionContext,
@@ -91,16 +92,23 @@ export class CallPanel {
     });
 
     this._panel.onDidDispose(() => {
-      yjsSync.forceEndCall(); // close the companion Chrome window too
-      yjsSync.leaveCall();
       this._disposed = true;
       CallPanel._instance = undefined;
+      if (!this._intentionalClose) {
+        // X button clicked — re-open in background without stealing focus (acts as minimize)
+        setTimeout(() => new CallPanel(context, yjsSync, roomCode, username), 150);
+      } else {
+        // End Call button or leaveCall command — truly close
+        yjsSync.forceEndCall();
+        yjsSync.leaveCall();
+      }
     });
 
     CallPanel._instance = this;
   }
 
   private _dispose() {
+    this._intentionalClose = true;
     this._disposed = true;
     CallPanel._instance = undefined;
     this._panel.dispose();
