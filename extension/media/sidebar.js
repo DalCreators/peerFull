@@ -80,13 +80,17 @@
   }
 
   function _attachStream(peerId, stream) {
-    // Create a hidden video element to decode the stream for canvas drawing
+    // Remove old video element for this peer if exists
+    if (remoteStreams[peerId] && remoteStreams[peerId]._pipVideo) {
+      remoteStreams[peerId]._pipVideo.remove();
+    }
+    // Video element needs real dimensions — Electron skips frame decoding for 1x1 elements
     var v = document.createElement('video');
     v.autoplay = true; v.playsInline = true; v.muted = true;
-    v.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;';
+    v.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:320px;height:180px;pointer-events:none;';
     v.srcObject = stream;
-    v.play().catch(function(){});
     document.body.appendChild(v);
+    v.play().catch(function(){});
     stream._pipVideo = v;
     remoteStreams[peerId] = stream;
     if (!pipActive) _enterPip();
