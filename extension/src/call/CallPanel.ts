@@ -43,6 +43,7 @@ export class CallPanel {
       { viewColumn: vscode.ViewColumn.Two, preserveFocus: true },
       {
         enableScripts: true,
+        retainContextWhenHidden: true, // keep webview alive when tab is hidden so PiP survives
         localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')]
       }
     );
@@ -90,6 +91,7 @@ export class CallPanel {
     });
 
     this._panel.onDidDispose(() => {
+      yjsSync.forceEndCall(); // close the companion Chrome window too
       yjsSync.leaveCall();
       this._disposed = true;
       CallPanel._instance = undefined;
