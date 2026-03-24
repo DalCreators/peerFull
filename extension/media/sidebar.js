@@ -50,11 +50,13 @@
   function _enterPip() {
     if (pipActive || !document.pictureInPictureEnabled) return;
     pipActive = true;
-    _drawPip();
     pipVideoEl = document.createElement('video');
     pipVideoEl.muted = true;
-    pipVideoEl.srcObject = pipCanvas.captureStream(25);
-    pipVideoEl.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;';
+    pipVideoEl.autoplay = true;
+    pipVideoEl.playsInline = true;
+    // Start with canvas so we can enter PiP immediately on user gesture
+    pipVideoEl.srcObject = pipCanvas.captureStream(1);
+    pipVideoEl.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:320px;height:180px;pointer-events:none;';
     document.body.appendChild(pipVideoEl);
     pipVideoEl.play().then(function() {
       return pipVideoEl.requestPictureInPicture();
@@ -67,6 +69,24 @@
     }).catch(function() { pipActive = false; });
   }
 
+  // Switch PiP source: direct stream for 1 peer, canvas composite for multiple
+  function _updatePipSource() {
+    if (!pipVideoEl || !pipActive) return;
+    var peerIds = Object.keys(remoteStreams);
+    if (peerIds.length === 0) return;
+    if (peerIds.length === 1) {
+      // Direct stream into PiP — bypasses canvas, most reliable in Electron
+      if (pipRafId) { cancelAnimationFrame(pipRafId); pipRafId = null; }
+      pipVideoEl.srcObject = remoteStreams[peerIds[0]];
+      pipVideoEl.play().catch(function(){});
+    } else {
+      // Multiple peers: canvas composite
+      pipVideoEl.srcObject = pipCanvas.captureStream(25);
+      pipVideoEl.play().catch(function(){});
+      if (!pipRafId) _drawPip();
+    }
+  }
+
   function _exitPip() {
     if (pipRafId) { cancelAnimationFrame(pipRafId); pipRafId = null; }
     if (document.pictureInPictureElement) document.exitPictureInPicture().catch(function(){});
@@ -74,17 +94,17 @@
     pipActive = false;
     Object.keys(remoteStreams).forEach(function(k) {
       var s = remoteStreams[k];
-      if (s._pipVideo) s._pipVideo.remove();
+      if (s && s._pipVideo) s._pipVideo.remove();
     });
     remoteStreams = {};
   }
 
   function _attachStream(peerId, stream) {
-    // Remove old video element for this peer if exists
+    // Remove old off-screen video for this peer
     if (remoteStreams[peerId] && remoteStreams[peerId]._pipVideo) {
       remoteStreams[peerId]._pipVideo.remove();
     }
-    // Video element needs real dimensions — Electron skips frame decoding for 1x1 elements
+    // Off-screen video needed for canvas composite (multiple peers)
     var v = document.createElement('video');
     v.autoplay = true; v.playsInline = true; v.muted = true;
     v.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:320px;height:180px;pointer-events:none;';
@@ -93,7 +113,8 @@
     v.play().catch(function(){});
     stream._pipVideo = v;
     remoteStreams[peerId] = stream;
-    if (!pipActive) _enterPip();
+    if (!pipActive) { _enterPip(); }
+    _updatePipSource();
   }
 
   function _setupCallPeer(peerId, peer) {
@@ -112,6 +133,7 @@
       }
       delete remoteStreams[peerId];
       delete callPeers[peerId];
+      _updatePipSource();
     });
     peer.on('error', function() {
       if (remoteStreams[peerId] && remoteStreams[peerId]._pipVideo) {
@@ -119,6 +141,7 @@
       }
       delete remoteStreams[peerId];
       delete callPeers[peerId];
+      _updatePipSource();
     });
   }
 
