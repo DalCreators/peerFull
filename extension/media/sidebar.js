@@ -54,8 +54,10 @@
     pipVideoEl.muted = true;
     pipVideoEl.autoplay = true;
     pipVideoEl.playsInline = true;
-    // Start with canvas so we can enter PiP immediately on user gesture
-    pipVideoEl.srcObject = pipCanvas.captureStream(1);
+    // Draw one frame so canvas stream has content (browsers require ≥1 frame for PiP)
+    pipCtx.fillStyle = '#111';
+    pipCtx.fillRect(0, 0, 640, 360);
+    pipVideoEl.srcObject = pipCanvas.captureStream(25);
     pipVideoEl.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:320px;height:180px;pointer-events:none;';
     document.body.appendChild(pipVideoEl);
     pipVideoEl.play().then(function() {
