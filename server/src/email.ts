@@ -1,25 +1,17 @@
 /**
  * email.ts
  * Sends zipped room files to subscribers when a room closes.
- * Requires SMTP env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+ * Requires: RESEND_API_KEY env var (get one free at resend.com)
  */
 
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import * as archiver from 'archiver';
 import { PassThrough } from 'stream';
 
-function getTransporter() {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-
-  return nodemailer.createTransport({
-    host,
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user, pass }
-  });
+function getResend() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return null;
+  return new Resend(apiKey);
 }
 
 /** Build an in-memory ZIP buffer from a file snapshot. */
@@ -44,7 +36,7 @@ async function buildZip(snapshot: Record<string, string>, folderName: string): P
   });
 }
 
-/** Send room files to all subscribers. Silently fails if SMTP not configured. */
+/** Send room files to all subscribers. Silently fails if Resend not configured. */
 export async function sendFilesToSubscribers(
   subscribers: string[],
   snapshot: Record<string, string>,
@@ -53,9 +45,9 @@ export async function sendFilesToSubscribers(
 ): Promise<void> {
   if (subscribers.length === 0) return;
 
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn('[Email] SMTP not configured — skipping subscriber emails');
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[Email] RESEND_API_KEY not configured — skipping subscriber emails');
     return;
   }
 
@@ -67,13 +59,13 @@ export async function sendFilesToSubscribers(
     return;
   }
 
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = process.env.EMAIL_FROM || 'PeerSync <onboarding@resend.dev>';
   const subject = `PeerSync Room ${roomCode} — Your Files`;
   const text = `Hi!\n\nAttached are all the files from your PeerSync session (Room ${roomCode}).\n\nHappy coding!\n— PeerSync`;
 
   for (const email of subscribers) {
     try {
-      await transporter.sendMail({
+      await resend.emails.send({
         from,
         to: email,
         subject,
