@@ -302,15 +302,35 @@ export function getCallPageHtml(): string {
 
     // ── WebRTC ───────────────────────────────────────────────────────────
 
+    // Prefer VP8/VP9 over H.264 — avoids macOS VideoToolbox concurrent-session
+    // limit that causes black video when Chrome and VS Code run on the same Mac.
+    function preferVP8(sdp) {
+      return sdp.split('\nm=').map((section, idx) => {
+        if (idx === 0 || !section.startsWith('video')) return section;
+        const lines = section.split('\n');
+        const mLine = lines[0].split(' ');
+        const header = mLine.slice(0, 3);
+        const pts = mLine.slice(3);
+        const vp8 = [], vp9 = [], rest = [];
+        pts.forEach(pt => {
+          if (section.includes('a=rtpmap:' + pt + ' VP8')) vp8.push(pt);
+          else if (section.includes('a=rtpmap:' + pt + ' VP9')) vp9.push(pt);
+          else rest.push(pt);
+        });
+        lines[0] = [...header, ...vp8, ...vp9, ...rest].join(' ');
+        return lines.join('\n');
+      }).join('\nm=');
+    }
+
     function initiatePeer(peerId) {
       if (peers[peerId] || !localStream) return;
-      const peer = new SimplePeer({ initiator: true, trickle: true, stream: localStream, config: ICE_CONFIG });
+      const peer = new SimplePeer({ initiator: true, trickle: true, stream: localStream, config: ICE_CONFIG, sdpTransform: preferVP8 });
       setupPeer(peerId, peer, true);
     }
 
     function handleSignal(peerId, signal) {
       if (!peers[peerId]) {
-        const peer = new SimplePeer({ initiator: false, trickle: true, stream: localStream, config: ICE_CONFIG });
+        const peer = new SimplePeer({ initiator: false, trickle: true, stream: localStream, config: ICE_CONFIG, sdpTransform: preferVP8 });
         setupPeer(peerId, peer, false);
       }
       peers[peerId].signal(signal);
