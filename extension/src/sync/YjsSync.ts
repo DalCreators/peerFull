@@ -275,12 +275,17 @@ export class YjsSync {
     const editorContent = editor.document.getText();
 
     if (yjsContent === '' && editorContent !== '') {
-      // First open of this file — push editor content into Yjs (only if we can write)
-      if (!this._isReadOnly) {
+      // Only the HOST seeds Yjs from their filesystem.
+      // Joiners must NOT insert snapshot content into Yjs — if both sides insert
+      // the same text with different client IDs, Yjs merges them as concurrent
+      // operations and produces scrambled output (e.g. "Hello" → "LloHe").
+      if (this._isHost && !this._isReadOnly) {
         this._ydoc.transact(() => {
           this._ytext!.insert(0, editorContent);
         });
       }
+      // Joiners: leave Yjs empty; the host's yjs-update will arrive and the
+      // observer below will sync the editor once the authoritative state lands.
     } else if (yjsContent !== '' && yjsContent !== editorContent) {
       // Yjs has edits from the other window — apply them to this editor now
       const edit = new vscode.WorkspaceEdit();

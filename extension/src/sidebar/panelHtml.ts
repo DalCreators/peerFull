@@ -270,12 +270,12 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     <div>
       <label style="font-size:11px;opacity:0.6;display:block;margin-bottom:6px;">Room type</label>
       <div style="display:flex;gap:6px;">
-        <div id="type-work" class="room-type-option selected" onclick="selectRoomType('work')" style="flex:1;padding:8px 6px;border-radius:8px;border:2px solid #7c3aed;background:rgba(124,58,237,0.15);cursor:pointer;text-align:center;">
+        <div id="type-work" style="flex:1;padding:8px 6px;border-radius:8px;border:2px solid #7c3aed;background:rgba(124,58,237,0.15);cursor:pointer;text-align:center;">
           <div style="font-size:15px;">💻</div>
           <div style="font-size:11px;font-weight:700;margin-top:2px;">Work</div>
           <div style="font-size:10px;opacity:0.55;">Everyone edits</div>
         </div>
-        <div id="type-tutor" class="room-type-option" onclick="selectRoomType('tutor')" style="flex:1;padding:8px 6px;border-radius:8px;border:2px solid #333;background:transparent;cursor:pointer;text-align:center;">
+        <div id="type-tutor" style="flex:1;padding:8px 6px;border-radius:8px;border:2px solid #333;background:transparent;cursor:pointer;text-align:center;">
           <div style="font-size:15px;">🎓</div>
           <div style="font-size:11px;font-weight:700;margin-top:2px;">Tutor</div>
           <div style="font-size:10px;opacity:0.55;">Host edits only</div>

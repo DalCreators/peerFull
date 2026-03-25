@@ -14,7 +14,6 @@
   let callPeers = {};
   let selectedRoomType = 'work'; // 'work' | 'tutor'
 
-  // Room type selector
   function selectRoomType(type) {
     selectedRoomType = type;
     var work = document.getElementById('type-work');
@@ -32,8 +31,6 @@
       work.style.background = 'transparent';
     }
   }
-  // Expose globally so onclick= attributes work
-  window.selectRoomType = selectRoomType;
 
   // ── PiP / WebRTC (runs inside sidebar webview, no separate tab needed) ──
   var ICE_CONFIG = {
@@ -312,6 +309,12 @@
         break;
     }
   });
+
+  // Room type tile clicks
+  var typeWorkEl  = document.getElementById('type-work');
+  var typeTutorEl = document.getElementById('type-tutor');
+  if (typeWorkEl)  typeWorkEl.addEventListener('click',  function() { selectRoomType('work'); });
+  if (typeTutorEl) typeTutorEl.addEventListener('click', function() { selectRoomType('tutor'); });
 
   // Button handlers
   createBtn.addEventListener('click', function() {

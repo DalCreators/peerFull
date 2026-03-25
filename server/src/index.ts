@@ -336,9 +336,12 @@ io.on('connection', (socket: Socket) => {
       socket.to(roomCode).emit('peer-left', { peerId: socket.id });
       socket.to(roomCode).emit('call-peer-left', { peerId: socket.id });
 
-      // If room is now empty and has subscribers, send them the files
+      // If room is now empty and has subscribers, send them the files.
+      // Note: the room still exists in the manager (2-min grace period before
+      // deletion), so we check isEmpty rather than !room.
       const updatedRoom = roomManager.getRoom(roomCode);
-      if (!updatedRoom && subscribers.length > 0) {
+      if (updatedRoom?.isEmpty && subscribers.length > 0) {
+        console.log(`[Email] Room ${roomCode} empty — sending files to ${subscribers.length} subscriber(s)`);
         sendFilesToSubscribers(subscribers, snapshot, folderName, roomCode).catch(console.error);
       }
     }
