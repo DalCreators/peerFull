@@ -19,6 +19,8 @@ interface RemoteUser {
   isMe?: boolean;
 }
 
+export type RoomType = 'work' | 'tutor';
+
 type UsersChangedCallback = (users: RemoteUser[]) => void;
 type SignalCallback = (peerId: string, signal: unknown) => void;
 type SessionWarningCallback = (secondsLeft: number) => void;
@@ -45,6 +47,8 @@ export class YjsSync {
   private _remoteCreatedFiles = new Set<string>(); // guard against echo
   private _syncFolderUri: vscode.Uri | null = null; // folder being watched/written to
   private _isHost = false;
+  private _roomType: RoomType = 'work';
+  private _isReadOnly = false; // true for non-host in tutor mode
   private _editorDisposables: vscode.Disposable[] = [];
   private _usersChangedCbs: UsersChangedCallback[] = [];
   private _signalCbs: SignalCallback[] = [];
@@ -56,9 +60,11 @@ export class YjsSync {
 
   // ── Connection ────────────────────────────────────────────────────────
 
-  async createRoom(username: string, isPro: boolean): Promise<string | undefined> {
+  async createRoom(username: string, isPro: boolean, roomType: RoomType = 'work'): Promise<string | undefined> {
     const serverUrl = this._getServerUrl();
     this._isHost = true;
+    this._roomType = roomType;
+    this._isReadOnly = false;
     this._syncFolderUri = vscode.workspace.workspaceFolders?.[0]?.uri ?? null;
 
     // Scan workspace for initial folder snapshot
@@ -71,9 +77,10 @@ export class YjsSync {
         vscode.window.showErrorMessage(`PeerSync: Cannot reach server at ${serverUrl} — ${err.message}`);
         resolve(undefined);
       });
-      this._socket!.emit('create-room', { username, isPro, folderName, snapshot }, (response: { roomCode?: string; error?: string }) => {
+      this._socket!.emit('create-room', { username, isPro, folderName, snapshot, roomType }, (response: { roomCode?: string; roomType?: RoomType; error?: string }) => {
         if (response.roomCode) {
           this._roomCode = response.roomCode;
+          this._roomType = response.roomType || roomType;
           this._initYjs();
           this._startFileWatcher();
           resolve(response.roomCode);
@@ -110,12 +117,16 @@ export class YjsSync {
       // Wait for connection before emitting join-room
       this._socket!.once('connect', () => {
         this._socket!.emit('join-room', { roomCode, username, isPro }, async (response: {
-          success?: boolean; error?: string; initialContent?: string;
-          folderName?: string; snapshot?: Record<string, string>;
+          success?: boolean; error?: string; yjsState?: number[];
+          folderName?: string; snapshot?: Record<string, string>; roomType?: RoomType;
         }) => {
           if (response.success) {
             this._roomCode = roomCode;
-            this._initYjs();
+            this._roomType = response.roomType || 'work';
+            this._isReadOnly = (this._roomType === 'tutor'); // non-host in tutor = read-only
+
+            // Initialize Yjs and apply the server's authoritative state BEFORE binding editor
+            this._initYjs(response.yjsState);
 
             // Create a local temp folder mirroring the host's workspace
             const tmpDir = path.join(os.tmpdir(), `peersync-${roomCode}`);
@@ -139,6 +150,10 @@ export class YjsSync {
             if (firstFile) {
               const fileUri = vscode.Uri.file(path.join(tmpDir, firstFile));
               vscode.window.showTextDocument(fileUri, { preview: false }).then(() => {}, () => {});
+            }
+
+            if (this._isReadOnly) {
+              vscode.window.showInformationMessage('PeerSync: Tutor mode — you are in read-only view.');
             }
 
             safeResolve(true);
@@ -166,6 +181,8 @@ export class YjsSync {
     this._socket = null;
     this._roomCode = null;
     this._editor = null;
+    this._isReadOnly = false;
+    this._roomType = 'work';
 
     // Remove temp workspace folder and close all its open files (participants only)
     if (!this._isHost && this._syncFolderUri) {
@@ -201,12 +218,29 @@ export class YjsSync {
     return this._roomCode;
   }
 
+  getRoomType(): RoomType {
+    return this._roomType;
+  }
+
+  isReadOnly(): boolean {
+    return this._isReadOnly;
+  }
+
+  isHost(): boolean {
+    return this._isHost;
+  }
+
   getServerUrl(): string {
     return this._getServerUrl();
   }
 
   forwardSignal(peerId: string, signal: unknown) {
     this._socket?.emit('webrtc-signal', { to: peerId, signal });
+  }
+
+  subscribeEmail(email: string) {
+    if (!this._roomCode) return;
+    this._socket?.emit('subscribe-email', { roomCode: this._roomCode, email });
   }
 
   // ── Editor binding ────────────────────────────────────────────────────
@@ -227,8 +261,6 @@ export class YjsSync {
     this._editor = editor;
 
     // Compute path relative to the sync folder so host and joiner use the same Yjs key.
-    // vscode.workspace.asRelativePath prepends the workspace folder name when there are
-    // multiple folders, which breaks key matching between host and joiner.
     const fileKey = this._syncFolderUri
       ? path.relative(this._syncFolderUri.fsPath, editor.document.uri.fsPath)
       : vscode.workspace.asRelativePath(editor.document.uri);
@@ -243,10 +275,12 @@ export class YjsSync {
     const editorContent = editor.document.getText();
 
     if (yjsContent === '' && editorContent !== '') {
-      // First open of this file — push editor content into Yjs
-      this._ydoc.transact(() => {
-        this._ytext!.insert(0, editorContent);
-      });
+      // First open of this file — push editor content into Yjs (only if we can write)
+      if (!this._isReadOnly) {
+        this._ydoc.transact(() => {
+          this._ytext!.insert(0, editorContent);
+        });
+      }
     } else if (yjsContent !== '' && yjsContent !== editorContent) {
       // Yjs has edits from the other window — apply them to this editor now
       const edit = new vscode.WorkspaceEdit();
@@ -290,23 +324,34 @@ export class YjsSync {
     };
     this._ytext.observe(this._ytextObserver);
 
-    // Send local edits into this file's YText
-    this._editorDisposables.push(
-      vscode.workspace.onDidChangeTextDocument((event) => {
-        if (event.document !== editor.document) return;
-        if (this._applyingRemoteCount > 0) return;
+    // Send local edits into this file's YText (skipped if read-only)
+    if (!this._isReadOnly) {
+      this._editorDisposables.push(
+        vscode.workspace.onDidChangeTextDocument((event) => {
+          if (event.document !== editor.document) return;
+          if (this._applyingRemoteCount > 0) return;
 
-        this._ydoc!.transact(() => {
-          const changes = [...event.contentChanges].sort((a, b) => b.rangeOffset - a.rangeOffset);
-          for (const change of changes) {
-            if (change.rangeLength > 0) this._ytext!.delete(change.rangeOffset, change.rangeLength);
-            if (change.text)            this._ytext!.insert(change.rangeOffset, change.text);
-          }
-        });
+          this._ydoc!.transact(() => {
+            const changes = [...event.contentChanges].sort((a, b) => b.rangeOffset - a.rangeOffset);
+            for (const change of changes) {
+              if (change.rangeLength > 0) this._ytext!.delete(change.rangeOffset, change.rangeLength);
+              if (change.text)            this._ytext!.insert(change.rangeOffset, change.text);
+            }
+          });
 
-        this._broadcastCursor(editor);
-      })
-    );
+          this._broadcastCursor(editor);
+        })
+      );
+
+      // When the file is saved, update the server snapshot so late joiners + email zip stay current
+      this._editorDisposables.push(
+        vscode.workspace.onDidSaveTextDocument((doc) => {
+          if (doc !== editor.document || !this._roomCode || !this._syncFolderUri) return;
+          const content = doc.getText();
+          this._socket?.emit('file-updated', { roomCode: this._roomCode, relativePath: fileKey, content });
+        })
+      );
+    }
 
     this._editorDisposables.push(
       vscode.window.onDidChangeTextEditorSelection((event) => {
@@ -366,9 +411,10 @@ export class YjsSync {
     });
 
     // Receive Yjs updates from other clients
-    this._socket.on('yjs-update', (update: Uint8Array) => {
+    // Use 'remote' origin so our own _ydoc.on('update') handler won't re-broadcast them
+    this._socket.on('yjs-update', (update: ArrayBuffer | Buffer | Uint8Array | number[]) => {
       if (this._ydoc) {
-        Y.applyUpdate(this._ydoc, new Uint8Array(update));
+        Y.applyUpdate(this._ydoc, new Uint8Array(update as ArrayLike<number>), 'remote');
       }
     });
 
@@ -459,6 +505,11 @@ export class YjsSync {
       }
     });
 
+    // Email subscription confirmed
+    this._socket.on('subscribe-confirmed', (data: { email: string }) => {
+      vscode.window.showInformationMessage(`PeerSync: ${data.email} will receive all files when the room closes.`);
+    });
+
     this._socket.on('run-output', (data: { chunk: string; isError?: boolean; done?: boolean; username?: string }) => {
       this._runOutputCbs.forEach(cb => cb(data));
     });
@@ -468,10 +519,17 @@ export class YjsSync {
     });
   }
 
-  private _initYjs() {
+  private _initYjs(initialState?: number[]) {
     this._ydoc = new Y.Doc();
-    // Broadcast all Yjs updates to the room — works for all YTexts in this doc
-    this._ydoc.on('update', (update: Uint8Array) => {
+
+    // If we have a server state, apply it first so we don't re-insert content the host already has
+    if (initialState && initialState.length > 0) {
+      Y.applyUpdate(this._ydoc, new Uint8Array(initialState), 'remote');
+    }
+
+    // Broadcast only LOCAL Yjs updates (not remote ones marked with 'remote' origin)
+    this._ydoc.on('update', (update: Uint8Array, origin: unknown) => {
+      if (origin === 'remote') return; // don't echo back remote updates
       this._socket?.emit('yjs-update', { roomCode: this._roomCode, update: Array.from(update) });
     });
   }
@@ -498,9 +556,6 @@ export class YjsSync {
     const doc = this._editor.document;
     const startPos = doc.positionAt(data.position);
 
-    // For the dot to render, `after` needs a non-empty range.
-    // If there's no selection, extend to the next character on the line.
-    // If at end of line/file, keep it as-is (VS Code renders `after` on empty lines too).
     let endPos = doc.positionAt(data.position + data.length);
     if (data.length === 0) {
       const line = doc.lineAt(startPos.line);
@@ -509,12 +564,10 @@ export class YjsSync {
       }
     }
 
-    // Cursor bar — thin colored line on the left edge
     const cursorDecoration = vscode.window.createTextEditorDecorationType({
       borderWidth: '0 0 0 2px',
       borderStyle: 'solid',
       borderColor: data.color,
-      // Small colored dot floats after the cursor position
       after: {
         contentText: ' ● ',
         backgroundColor: data.color,
@@ -524,7 +577,6 @@ export class YjsSync {
       }
     });
 
-    // Selection highlight (only when text is actually selected)
     const selectionDecoration = vscode.window.createTextEditorDecorationType({
       backgroundColor: `${data.color}33`,
     });
@@ -533,12 +585,10 @@ export class YjsSync {
 
     this._editor.setDecorations(cursorDecoration, [new vscode.Range(startPos, endPos)]);
 
-    // Apply selection highlight separately if there's an actual selection
     if (data.length > 0) {
       this._editor.setDecorations(selectionDecoration, [new vscode.Range(startPos, doc.positionAt(data.position + data.length))]);
     }
 
-    // Clean up the selection decoration alongside the cursor decoration
     const originalDispose = cursorDecoration.dispose.bind(cursorDecoration);
     (cursorDecoration as any).dispose = () => {
       originalDispose();
@@ -562,6 +612,7 @@ export class YjsSync {
     watcher.onDidCreate(async (uri) => {
       if (!this._socket || !this._roomCode) return;
       if (this._remoteCreatedFiles.has(uri.fsPath)) return;
+      if (this._isReadOnly) return; // tutor-mode students can't create files
 
       const relativePath = path.relative(syncRoot.fsPath, uri.fsPath);
 

@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { YjsSync } from '../sync/YjsSync';
+import { YjsSync, RoomType } from '../sync/YjsSync';
 import { runFile } from '../runner/CodeRunner';
 import { ChatManager, ChatMessage } from '../chat/ChatManager';
 import { LicenseManager } from '../auth/LicenseManager';
@@ -46,7 +46,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.type) {
         case 'createRoom':
-          await this.createRoom(msg.username);
+          await this.createRoom(msg.username, msg.roomType);
           break;
 
         case 'joinRoom':
@@ -76,6 +76,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           vscode.workspace.getConfiguration('codesync').update('username', msg.username, true);
           break;
 
+        case 'subscribeEmail':
+          if (msg.email) {
+            this._yjsSync.subscribeEmail(msg.email);
+          }
+          break;
+
         case 'joinCall': {
           const roomCode = this._yjsSync.getRoomCode();
           const username = this._getUsername();
@@ -103,7 +109,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             this._post({ type: 'runOutput', chunk: 'No active file to run.\n', isError: true, done: true });
             break;
           }
-          // Save the file first
+          // Save the file first (writes Yjs-applied content to disk)
           await editor.document.save();
           const filePath = editor.document.uri.fsPath;
           this._post({ type: 'runOutput', chunk: `▶ Running ${path.basename(filePath)}...\n`, isError: false, done: false });
@@ -168,12 +174,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   // ─── Public API (called from commands) ───────────────────────────────────
 
-  async createRoom(username?: string): Promise<string | undefined> {
+  async createRoom(username?: string, roomType: RoomType = 'work'): Promise<string | undefined> {
     const name = username?.trim() || this._getUsername();
     const isPro = this._licenseManager.isPro();
-    const roomCode = await this._yjsSync.createRoom(name, isPro);
+    const roomCode = await this._yjsSync.createRoom(name, isPro, roomType);
     if (roomCode) {
-      this._post({ type: 'roomJoined', roomCode, isHost: true, isPro });
+      this._post({ type: 'roomJoined', roomCode, isHost: true, isPro, roomType });
       this._chatManager.connect(this._yjsSync.getSocket()!);
     }
     return roomCode;
@@ -184,10 +190,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const isPro = this._licenseManager.isPro();
     const success = await this._yjsSync.joinRoom(roomCode, name, isPro);
     if (success) {
-      this._post({ type: 'roomJoined', roomCode, isHost: false, isPro });
+      const roomType = this._yjsSync.getRoomType();
+      const isReadOnly = this._yjsSync.isReadOnly();
+      this._post({ type: 'roomJoined', roomCode, isHost: false, isPro, roomType, isReadOnly });
       this._chatManager.connect(this._yjsSync.getSocket()!);
-      // Editor binding is handled inside YjsSync.joinRoom — it opens an
-      // untitled doc pre-filled with the host's content automatically.
     } else {
       this._post({ type: 'error', message: 'Failed to join room. Check the code and try again.' });
     }
@@ -225,11 +231,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 }
 
-/**
- * Opens the call URL in a minimal Chrome/Edge app-mode window (no address bar,
- * no tabs, ~300×160px). Falls back to vscode.env.openExternal if no Chromium
- * browser is found.
- */
 /**
  * Opens the call URL as a minimal 300×160 app-mode window.
  * Uses direct binary spawn so --window-size is respected even when the

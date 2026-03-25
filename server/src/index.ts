@@ -15,11 +15,12 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
-import { RoomManager } from './rooms';
+import { RoomManager, RoomType } from './rooms';
 import { setupDatabase } from './database';
 import { licenseRouter } from './routes/license';
 import { stripeRouter } from './routes/stripe';
 import { getCallPageHtml } from './callPage';
+import { sendFilesToSubscribers } from './email';
 
 const PORT = process.env.PORT || 3001;
 const CLIENT_ORIGINS = (process.env.CLIENT_ORIGINS || '*').split(',');
@@ -54,20 +55,24 @@ io.on('connection', (socket: Socket) => {
   console.log(`[+] Client connected: ${socket.id}`);
 
   // ── Create room ──────────────────────────────────────────────────────
-  socket.on('create-room', (data: { username: string; isPro: boolean; folderName?: string; snapshot?: Record<string, string> }, callback) => {
+  socket.on('create-room', (data: {
+    username: string; isPro: boolean; folderName?: string;
+    snapshot?: Record<string, string>; roomType?: RoomType;
+  }, callback) => {
     try {
       const room = roomManager.createRoom(socket.id, data.username, data.isPro);
       room.folderName = data.folderName || 'workspace';
       room.folderSnapshot = data.snapshot || {};
+      room.roomType = data.roomType || 'work';
       socket.join(room.code);
-      console.log(`[Room] Created ${room.code} by ${data.username} (folder: ${room.folderName})`);
+      console.log(`[Room] Created ${room.code} by ${data.username} (type: ${room.roomType}, folder: ${room.folderName})`);
 
       // Start session timer for free users
       if (!data.isPro) {
         startSessionTimer(socket, room.code);
       }
 
-      callback({ roomCode: room.code });
+      callback({ roomCode: room.code, roomType: room.roomType });
 
       // Broadcast updated user list
       broadcastUsers(room.code);
@@ -84,8 +89,8 @@ io.on('connection', (socket: Socket) => {
       return;
     }
 
-    // Free tier: max 2 people; Pro: max 5
-    const maxUsers = room.isPro ? 5 : 2;
+    // Free tier: max 5 people; Pro: max 10
+    const maxUsers = room.isPro ? 10 : 5;
     if (room.users.size >= maxUsers) {
       callback({ success: false, error: `Room is full (max ${maxUsers} users)` });
       return;
@@ -95,14 +100,15 @@ io.on('connection', (socket: Socket) => {
     socket.join(data.roomCode);
     console.log(`[Room] ${data.username} joined ${data.roomCode}`);
 
-    // Send the current document state + folder snapshot to the joiner
-    const content = room.documentContent || '';
+    // Send the current Yjs document state to the joiner (full state vector)
+    const yjsState = Array.from(room.getStateUpdate());
 
     callback({
       success: true,
-      initialContent: content,
+      yjsState,
       folderName: room.folderName,
-      snapshot: room.folderSnapshot
+      snapshot: room.folderSnapshot,
+      roomType: room.roomType
     });
 
     // Broadcast updated user list to everyone
@@ -116,6 +122,9 @@ io.on('connection', (socket: Socket) => {
   socket.on('yjs-update', (data: { roomCode: string; update: number[] }) => {
     const room = roomManager.getRoom(data.roomCode);
     if (!room) return;
+
+    // In tutor mode, only the host may push edits
+    if (room.roomType === 'tutor' && socket.id !== room.hostId) return;
 
     const update = new Uint8Array(data.update);
     room.applyUpdate(update);
@@ -131,14 +140,19 @@ io.on('connection', (socket: Socket) => {
     const user = room.users.get(socket.id);
     if (!user) return;
     user.currentFile = data.relativePath;
-    // Tell others to open this file too
+
+    // In tutor mode, only host can steer others' file focus
+    if (room.roomType === 'tutor' && socket.id !== room.hostId) {
+      broadcastUsers(data.roomCode);
+      return;
+    }
+
     socket.to(data.roomCode).emit('user-file-focus', {
       userId: socket.id,
       username: user.username,
       color: user.color,
       relativePath: data.relativePath
     });
-    // Refresh sidebar presence for everyone
     broadcastUsers(data.roomCode);
   });
 
@@ -181,15 +195,40 @@ io.on('connection', (socket: Socket) => {
 
   // ── File created ─────────────────────────────────────────────────────
   socket.on('file-created', (data: { roomCode: string; relativePath: string; content: string }) => {
-    // Update server snapshot so late joiners get the file too
     const room = roomManager.getRoom(data.roomCode);
-    if (room) { room.folderSnapshot[data.relativePath] = data.content; }
+    if (!room) return;
+    // In tutor mode, only host may create files for others
+    if (room.roomType === 'tutor' && socket.id !== room.hostId) return;
+    room.folderSnapshot[data.relativePath] = data.content;
     socket.to(data.roomCode).emit('file-created', { relativePath: data.relativePath, content: data.content });
   });
 
   // ── Folder created ────────────────────────────────────────────────────
   socket.on('folder-created', (data: { roomCode: string; relativePath: string }) => {
+    const room = roomManager.getRoom(data.roomCode);
+    if (!room) return;
+    if (room.roomType === 'tutor' && socket.id !== room.hostId) return;
     socket.to(data.roomCode).emit('folder-created', { relativePath: data.relativePath });
+  });
+
+  // ── File updated (Yjs content saved back to snapshot) ────────────────
+  socket.on('file-updated', (data: { roomCode: string; relativePath: string; content: string }) => {
+    const room = roomManager.getRoom(data.roomCode);
+    if (!room) return;
+    room.folderSnapshot[data.relativePath] = data.content;
+  });
+
+  // ── Email subscription ────────────────────────────────────────────────
+  socket.on('subscribe-email', (data: { roomCode: string; email: string }) => {
+    const room = roomManager.getRoom(data.roomCode);
+    if (!room) return;
+    const email = data.email.trim().toLowerCase();
+    if (!email || !email.includes('@')) return;
+    if (!room.subscribers.includes(email)) {
+      room.subscribers.push(email);
+      console.log(`[Subscribe] ${email} subscribed to room ${data.roomCode}`);
+    }
+    socket.emit('subscribe-confirmed', { email });
   });
 
   // ── Call join (extension socket already in room) ─────────────────────
@@ -287,10 +326,21 @@ io.on('connection', (socket: Socket) => {
     // Full room member disconnect
     const roomCode = roomManager.getRoomForUser(socket.id);
     if (roomCode) {
+      const room = roomManager.getRoom(roomCode);
+      const subscribers = room?.subscribers ?? [];
+      const snapshot = room?.folderSnapshot ?? {};
+      const folderName = room?.folderName ?? 'workspace';
+
       roomManager.removeUser(roomCode, socket.id);
       broadcastUsers(roomCode);
       socket.to(roomCode).emit('peer-left', { peerId: socket.id });
       socket.to(roomCode).emit('call-peer-left', { peerId: socket.id });
+
+      // If room is now empty and has subscribers, send them the files
+      const updatedRoom = roomManager.getRoom(roomCode);
+      if (!updatedRoom && subscribers.length > 0) {
+        sendFilesToSubscribers(subscribers, snapshot, folderName, roomCode).catch(console.error);
+      }
     }
 
     // Voice-only browser tab disconnect

@@ -12,6 +12,8 @@ const COLORS = [
   '#dc2626', '#0891b2', '#be185d', '#0d9488'
 ];
 
+export type RoomType = 'work' | 'tutor';
+
 export interface User {
   id: string;
   username: string;
@@ -23,11 +25,13 @@ export class Room {
   public code: string;
   public hostId: string;
   public isPro: boolean;
+  public roomType: RoomType = 'work';
   public users = new Map<string, User>();
   public callParticipants = new Set<string>();
   public createdAt = Date.now();
   public folderName: string = 'workspace';
   public folderSnapshot: Record<string, string> = {};
+  public subscribers: string[] = []; // email addresses subscribed to receive files on room end
 
   // Yjs document — server maintains authoritative state
   private _ydoc = new Y.Doc();
@@ -56,9 +60,9 @@ export class Room {
     Y.applyUpdate(this._ydoc, update);
   }
 
-  /** Get the current document content as a string */
-  get documentContent(): string {
-    return this._ydoc.getText('content').toString();
+  /** Get the full Yjs document state as a binary update (for sending to new joiners) */
+  getStateUpdate(): Uint8Array {
+    return Y.encodeStateAsUpdate(this._ydoc);
   }
 
   get isEmpty(): boolean {

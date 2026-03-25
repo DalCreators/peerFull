@@ -20,6 +20,35 @@ export function getCallPageHtml(): string {
       height: 100vh; overflow: hidden;
     }
 
+    /* ── Pre-join dialog ── */
+    #prejoin {
+      position: fixed; inset: 0; z-index: 100;
+      background: #111;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #prejoin-card {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 14px;
+      padding: 32px 28px; width: 320px; display: flex; flex-direction: column; gap: 16px;
+    }
+    #prejoin-card h2 { font-size: 18px; color: #a78bfa; }
+    #prejoin-card p { font-size: 13px; opacity: 0.65; }
+    .media-option {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 10px; border: 2px solid #333;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    }
+    .media-option:hover { background: #222; border-color: #555; }
+    .media-option.selected { border-color: #7c3aed; background: #1e1633; }
+    .media-option .icon { font-size: 22px; }
+    .media-option .label { font-size: 14px; font-weight: 600; }
+    .media-option .sub   { font-size: 11px; opacity: 0.55; }
+    #join-btn-prejoin {
+      padding: 11px; border-radius: 8px; border: none; cursor: pointer;
+      background: #7c3aed; color: #fff; font-size: 14px; font-weight: 600;
+      transition: background 0.15s;
+    }
+    #join-btn-prejoin:hover { background: #6d28d9; }
+
     /* ── Header ── */
     #header {
       display: flex; align-items: center; gap: 10px;
@@ -85,6 +114,32 @@ export function getCallPageHtml(): string {
   </style>
 </head>
 <body>
+  <!-- Pre-join dialog -->
+  <div id="prejoin">
+    <div id="prejoin-card">
+      <h2>🎙 Join Call</h2>
+      <p>Choose how you want to join the call:</p>
+
+      <div class="media-option selected" id="opt-av" onclick="selectOption('av')">
+        <div class="icon">📹</div>
+        <div>
+          <div class="label">Audio + Video</div>
+          <div class="sub">Camera and microphone</div>
+        </div>
+      </div>
+
+      <div class="media-option" id="opt-ao" onclick="selectOption('ao')">
+        <div class="icon">🎤</div>
+        <div>
+          <div class="label">Audio Only</div>
+          <div class="sub">Microphone only — no camera</div>
+        </div>
+      </div>
+
+      <button id="join-btn-prejoin" onclick="startWithChoice()">Join Now</button>
+    </div>
+  </div>
+
   <div id="header">
     <h1>🎙 PeerSync</h1>
     <span id="status">Connecting…</span>
@@ -109,9 +164,21 @@ export function getCallPageHtml(): string {
     const isMinimal = params.get('minimal') === '1';
     document.getElementById('room-tag').textContent = 'Room: ' + roomCode;
 
+    // ── Pre-join choice ───────────────────────────────────────────────────
+    let mediaChoice = 'av'; // 'av' | 'ao'
+
+    function selectOption(choice) {
+      mediaChoice = choice;
+      document.getElementById('opt-av').classList.toggle('selected', choice === 'av');
+      document.getElementById('opt-ao').classList.toggle('selected', choice === 'ao');
+    }
+
+    async function startWithChoice() {
+      document.getElementById('prejoin').style.display = 'none';
+      await start(mediaChoice === 'av');
+    }
+
     // ── Minimal mode — self-preview only, all controls come from VS Code ──
-    // We hide existing elements (keep them in DOM so log/showError still work)
-    // and add a small self-video on top.
     const miniSelfVideo = document.createElement('video');
     miniSelfVideo.autoplay = true; miniSelfVideo.playsInline = true; miniSelfVideo.muted = true;
     miniSelfVideo.style.cssText =
@@ -121,6 +188,7 @@ export function getCallPageHtml(): string {
       document.getElementById('header').style.display   = 'none';
       document.getElementById('video-grid').style.display = 'none';
       document.getElementById('controls').style.display  = 'none';
+      document.getElementById('prejoin').style.display   = 'none'; // skip dialog in minimal
       document.body.style.background = '#000';
       document.body.appendChild(miniSelfVideo);
     }
@@ -209,21 +277,32 @@ export function getCallPageHtml(): string {
 
     // ── Start call ───────────────────────────────────────────────────────
 
-    async function start() {
-      log('Requesting camera & microphone…');
+    async function start(withVideo) {
+      log('Requesting ' + (withVideo ? 'camera & microphone' : 'microphone') + '…');
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
       } catch (e) {
-        // Try audio-only fallback
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-          showError('Camera not available — audio only');
-        } catch (e2) {
-          showError('Microphone denied: ' + e2.message);
+        if (withVideo) {
+          // Video failed — fall back to audio only
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            showError('Camera not available — joined with audio only');
+          } catch (e2) {
+            showError('Microphone denied: ' + e2.message);
+            log('Could not access microphone.');
+            return;
+          }
+        } else {
+          showError('Microphone denied: ' + e.message);
           log('Could not access microphone.');
           return;
         }
       }
+
+      // Update cam button visibility based on whether we have video
+      const hasVideo = localStream.getVideoTracks().length > 0;
+      camBtn.style.display = hasVideo ? '' : 'none';
+      camOn = hasVideo;
 
       log('Joining call…');
       socket.emit('call-join-voice', { roomCode, username }, (res) => {
@@ -231,7 +310,6 @@ export function getCallPageHtml(): string {
         log('In call');
 
         if (isMinimal) {
-          // Show self-camera preview fullscreen in the mini window
           if (localStream) {
             miniSelfVideo.srcObject = localStream;
             miniSelfVideo.style.display = 'block';
@@ -261,7 +339,6 @@ export function getCallPageHtml(): string {
     });
 
     socket.on('call-peer-joined', ({ peerId, username: u }) => {
-      // Store their username — they will initiate toward us via WebRTC
       peerUsernames[peerId] = u || peerId.slice(0, 6);
       log((u || 'Someone') + ' joined the call...');
     });
@@ -270,7 +347,7 @@ export function getCallPageHtml(): string {
     socket.on('call-panel-joined', ({ peerId }) => {
       log('VS Code panel connected');
       if (localStream) initiatePeer(peerId);
-      else pendingPeers.push({ peerId, username: '' }); // must match object shape used in start()
+      else pendingPeers.push({ peerId, username: '' });
     });
 
     socket.on('call-peer-left', ({ peerId }) => {
@@ -318,7 +395,6 @@ export function getCallPageHtml(): string {
 
     function setupPeer(peerId, peer, isInitiator) {
       peers[peerId] = peer;
-      const color = COLORS[colorIdx++ % COLORS.length];
 
       peer.on('signal', data => socket.emit('webrtc-signal', { to: peerId, signal: data }));
 
@@ -366,7 +442,11 @@ export function getCallPageHtml(): string {
       window.close();
     });
 
-    socket.on('connect', start);
+    // In minimal mode, start immediately with audio+video (controlled from VS Code)
+    socket.on('connect', () => {
+      if (isMinimal) start(true);
+      // Otherwise user chooses via the pre-join dialog
+    });
   </script>
 </body>
 </html>`;

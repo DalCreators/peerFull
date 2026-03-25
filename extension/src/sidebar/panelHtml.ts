@@ -266,6 +266,23 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       <input id="username-input" type="text" placeholder="e.g. Alex" maxlength="24" />
     </div>
 
+    <!-- Room type selector -->
+    <div>
+      <label style="font-size:11px;opacity:0.6;display:block;margin-bottom:6px;">Room type</label>
+      <div style="display:flex;gap:6px;">
+        <div id="type-work" class="room-type-option selected" onclick="selectRoomType('work')" style="flex:1;padding:8px 6px;border-radius:8px;border:2px solid #7c3aed;background:rgba(124,58,237,0.15);cursor:pointer;text-align:center;">
+          <div style="font-size:15px;">💻</div>
+          <div style="font-size:11px;font-weight:700;margin-top:2px;">Work</div>
+          <div style="font-size:10px;opacity:0.55;">Everyone edits</div>
+        </div>
+        <div id="type-tutor" class="room-type-option" onclick="selectRoomType('tutor')" style="flex:1;padding:8px 6px;border-radius:8px;border:2px solid #333;background:transparent;cursor:pointer;text-align:center;">
+          <div style="font-size:15px;">🎓</div>
+          <div style="font-size:11px;font-weight:700;margin-top:2px;">Tutor</div>
+          <div style="font-size:10px;opacity:0.55;">Host edits only</div>
+        </div>
+      </div>
+    </div>
+
     <button class="btn btn-primary" id="create-btn">Create Room</button>
     <div class="divider">-- or --</div>
 
@@ -296,6 +313,7 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     <div id="room-header">
       <span class="status-dot"></span>
       <span id="room-code-display" title="Click to copy room code">------</span>
+      <span id="room-type-badge" style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(124,58,237,0.3);color:#a78bfa;font-weight:700;display:none;"></span>
       <button class="btn btn-danger" id="leave-btn">Leave</button>
     </div>
 
@@ -342,6 +360,22 @@ export function getSidebarHtml(webview: vscode.Webview, extensionUri: vscode.Uri
           </div>
           <button class="btn btn-danger" id="leave-call-btn" style="font-size:11px;width:100%;">End Call</button>
         </div>
+      </div>
+
+      <!-- Read-only notice (shown in tutor mode for students) -->
+      <div id="readonly-notice" class="hidden" style="margin:0 12px 0;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);font-size:11px;color:#fbbf24;">
+        🎓 Tutor mode — view only. The host controls the session.
+      </div>
+
+      <!-- Email Subscription -->
+      <div class="section">
+        <div class="section-title">Get Files by Email</div>
+        <div style="display:flex;gap:6px;">
+          <input id="subscribe-email-input" type="email" placeholder="your@email.com"
+            style="flex:1;padding:6px 8px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:12px;outline:none;" />
+          <button id="subscribe-btn" class="btn btn-secondary" style="width:auto;padding:5px 10px;font-size:11px;">Subscribe</button>
+        </div>
+        <div id="subscribe-msg" style="font-size:10px;opacity:0.6;margin-top:4px;display:none;">You'll receive a ZIP of all files when the room closes.</div>
       </div>
 
       <!-- Chat -->

@@ -12,6 +12,28 @@
   let secondsLeft = 1800;
   let inCall = false;
   let callPeers = {};
+  let selectedRoomType = 'work'; // 'work' | 'tutor'
+
+  // Room type selector
+  function selectRoomType(type) {
+    selectedRoomType = type;
+    var work = document.getElementById('type-work');
+    var tutor = document.getElementById('type-tutor');
+    if (!work || !tutor) return;
+    if (type === 'work') {
+      work.style.borderColor = '#7c3aed';
+      work.style.background = 'rgba(124,58,237,0.15)';
+      tutor.style.borderColor = '#333';
+      tutor.style.background = 'transparent';
+    } else {
+      tutor.style.borderColor = '#7c3aed';
+      tutor.style.background = 'rgba(124,58,237,0.15)';
+      work.style.borderColor = '#333';
+      work.style.background = 'transparent';
+    }
+  }
+  // Expose globally so onclick= attributes work
+  window.selectRoomType = selectRoomType;
 
   // ── PiP / WebRTC (runs inside sidebar webview, no separate tab needed) ──
   var ICE_CONFIG = {
@@ -174,6 +196,8 @@
   const joinBtn           = document.getElementById('join-btn');
   const leaveBtn          = document.getElementById('leave-btn');
   const roomCodeDisp      = document.getElementById('room-code-display');
+  const roomTypeBadge     = document.getElementById('room-type-badge');
+  const readonlyNotice    = document.getElementById('readonly-notice');
   const usersList         = document.getElementById('users-list');
   const chatMessages      = document.getElementById('chat-messages');
   const chatInput         = document.getElementById('chat-input');
@@ -192,6 +216,9 @@
   const runBtn            = document.getElementById('run-btn');
   const stopBtn           = document.getElementById('stop-btn');
   const runOutput         = document.getElementById('run-output');
+  const subscribeEmailInput = document.getElementById('subscribe-email-input');
+  const subscribeBtn      = document.getElementById('subscribe-btn');
+  const subscribeMsg      = document.getElementById('subscribe-msg');
 
   // Tell extension webview is ready
   vscode.postMessage({ type: 'ready' });
@@ -211,7 +238,7 @@
       case 'roomJoined':
         currentRoomCode = msg.roomCode;
         isPro = msg.isPro;
-        _showRoom();
+        _showRoom(msg.roomType, msg.isReadOnly);
         _applyProState();
         if (!isPro) _startTimer();
         break;
@@ -289,7 +316,7 @@
   // Button handlers
   createBtn.addEventListener('click', function() {
     var username = usernameInput.value.trim() || 'Anonymous';
-    vscode.postMessage({ type: 'createRoom', username: username });
+    vscode.postMessage({ type: 'createRoom', username: username, roomType: selectedRoomType });
   });
 
   joinBtn.addEventListener('click', function() {
@@ -326,6 +353,21 @@
   activeLicBtn.addEventListener('click', function() {
     vscode.postMessage({ type: 'activateLicense' });
   });
+
+  // Email subscription
+  if (subscribeBtn) {
+    subscribeBtn.addEventListener('click', function() {
+      var email = subscribeEmailInput ? subscribeEmailInput.value.trim() : '';
+      if (!email || !email.includes('@')) {
+        _showError('Please enter a valid email address');
+        return;
+      }
+      vscode.postMessage({ type: 'subscribeEmail', email: email });
+      if (subscribeMsg) {
+        subscribeMsg.style.display = 'block';
+      }
+    });
+  }
 
   var shareFileBtn = document.getElementById('share-file-btn');
   var shareFileMsg = document.getElementById('share-file-msg');
@@ -396,11 +438,29 @@
   }
 
   // UI helpers
-  function _showRoom() {
+  function _showRoom(roomType, isReadOnly) {
     lobby.classList.add('hidden');
     roomView.classList.remove('hidden');
     roomCodeDisp.textContent = currentRoomCode || '------';
     errorArea.classList.add('hidden');
+
+    // Room type badge
+    if (roomType && roomTypeBadge) {
+      roomTypeBadge.textContent = roomType === 'tutor' ? 'TUTOR' : 'WORK';
+      roomTypeBadge.style.display = '';
+      roomTypeBadge.style.background = roomType === 'tutor' ? 'rgba(245,158,11,0.3)' : 'rgba(124,58,237,0.3)';
+      roomTypeBadge.style.color = roomType === 'tutor' ? '#fbbf24' : '#a78bfa';
+    }
+
+    // Read-only notice for tutor-mode students
+    if (readonlyNotice) {
+      readonlyNotice.classList.toggle('hidden', !isReadOnly);
+    }
+
+    // In tutor read-only mode, hide the run button (students watch, don't run)
+    if (isReadOnly && runBtn) {
+      runBtn.style.display = 'none';
+    }
   }
 
   function _showLobby() {
