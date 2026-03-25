@@ -302,9 +302,12 @@ export class CallPanel {
         const video = document.createElement('video');
         video.autoplay = true; video.playsInline = true; video.muted = true;
         if (isSelf) video.style.transform = 'scaleX(-1)';
+        // Null-reset forces Electron to re-initialise the media pipeline (fixes black video on Mac)
+        video.srcObject = null;
         video.srcObject = stream;
-        // Explicit play() required — Electron webview autoplay policy may block it
         video.play().catch(() => {});
+        // Retry play after short delay — Mac Electron sometimes needs a second attempt
+        setTimeout(() => { if (video.paused) video.play().catch(() => {}); }, 500);
         tile.insertBefore(video, tile.querySelector('.tile-label'));
       } else {
         const noVid = document.createElement('div');
