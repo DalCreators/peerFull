@@ -270,7 +270,7 @@ export function getCallPageHtml(): string {
     socket.on('call-panel-joined', ({ peerId }) => {
       log('VS Code panel connected');
       if (localStream) initiatePeer(peerId);
-      else pendingPeers.push(peerId);
+      else pendingPeers.push({ peerId, username: '' }); // must match object shape used in start()
     });
 
     socket.on('call-peer-left', ({ peerId }) => {
