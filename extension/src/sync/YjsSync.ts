@@ -615,6 +615,6 @@ export class YjsSync {
 
   private _getServerUrl(): string {
     return vscode.workspace.getConfiguration('codesync').get<string>('serverUrl')
-      || 'https://awake-solace-production-bb18.up.railway.app';
+      || 'https://peerfull.onrender.com';
   }
 }
