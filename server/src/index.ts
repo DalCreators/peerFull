@@ -18,7 +18,6 @@ import cors from 'cors';
 import { RoomManager } from './rooms';
 import { setupDatabase } from './database';
 import { licenseRouter } from './routes/license';
-import { stripeRouter } from './routes/stripe';
 import { getCallPageHtml } from './callPage';
 
 const PORT = process.env.PORT || 3001;
@@ -33,15 +32,12 @@ const io = new Server(httpServer, {
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({ origin: CLIENT_ORIGINS }));
-// Raw body needed for Stripe webhook signature verification
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 // ── REST Routes ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
 app.get('/call/:roomCode', (_req, res) => res.send(getCallPageHtml()));
 app.use('/api/license', licenseRouter);
-app.use('/api/stripe', stripeRouter);
 
 // ── Room manager ─────────────────────────────────────────────────────────────
 const roomManager = new RoomManager();
