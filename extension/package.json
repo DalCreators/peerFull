@@ -63,7 +63,7 @@
       "properties": {
         "codesync.serverUrl": {
           "type": "string",
-          "default": "https://awake-solace-production-bb18.up.railway.app",
+          "default": "https://peerfull.onrender.com",
           "description": "CodeSync signaling server URL"
         },
         "codesync.username": {
