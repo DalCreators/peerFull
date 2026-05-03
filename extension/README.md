@@ -1,31 +1,45 @@
-# PeerSync — Real-time Collaborative Coding
+# PeerSync — Collaborative Coding for VS Code
 
-Code together in real-time, directly inside VS Code. No browser required.
+**Code together in real-time, without leaving VS Code.**
 
-## Features
+PeerSync brings real-time collaboration directly into your editor — shared cursors, instant code sync, built-in chat, and peer-to-peer video calling. No browser tabs, no screen sharing hacks, no latency.
 
-- **Real-time code sync** — Every keystroke synced instantly using Yjs CRDT (no conflicts, ever)
-- **Live cursors** — See your collaborator's cursor with colored decorations
-- **Text chat** — Built-in sidebar chat while you code
-- **File sharing** — Entire workspace folder shared automatically when a peer joins
-- **Code execution** — Run code and share output with your peers (Python, Node.js, Go, Java, C/C++, Ruby)
-- **Video & audio calling** — WebRTC peer-to-peer calls without leaving VS Code (Pro)
+---
 
-## How to Use
+## What You Get
 
-### Create a Room
-1. Click the **PeerSync** icon in the activity bar
-2. Enter your name and click **Create Room**
-3. Share the 6-character room code with your collaborator
+### Real-time Code Sync
+Every keystroke is synced instantly to your collaborators using **Yjs CRDT** — the same conflict-free technology used by Figma and Google Docs. No merge conflicts. No overwrites. Ever.
 
-### Join a Room
-1. Click the **PeerSync** icon in the activity bar
-2. Enter your name and the room code
-3. Click **Join Room** — the shared workspace opens automatically
+### Live Cursors
+See exactly where your collaborators are in the file — colored cursor decorations update in real-time as they type and move.
 
-### Run Code Together
-- Click **Run** in the sidebar to execute the active file
-- Output is streamed live to everyone in the room
+### Workspace Sharing
+When a peer joins your room, your entire workspace is shared automatically. They get a full copy of your project files, ready to edit — no manual file sharing needed.
+
+### Built-in Chat
+A text chat sidebar so you can communicate without alt-tabbing to Slack or Discord.
+
+### Code Execution
+Run your code directly from the sidebar in **Python, Node.js, Go, Java, C, C++, Ruby, TypeScript, or Bash** — and everyone in the room sees the output live.
+
+### Video & Audio Calling *(Pro)*
+Peer-to-peer video and audio calls directly inside VS Code via WebRTC — no Zoom, no Google Meet, no external tools.
+
+---
+
+## Getting Started
+
+**1. Create a room**
+Click the PeerSync icon in the activity bar → enter your name → click **Create Room** → share the 6-character code with your collaborator.
+
+**2. Join a room**
+Click the PeerSync icon → enter your name and the room code → click **Join Room**. Your shared workspace opens instantly.
+
+**3. Code together**
+Your files, cursors, and edits are synced in real-time. Use the sidebar to chat, run code, or start a call.
+
+---
 
 ## Free vs Pro
 
@@ -34,25 +48,40 @@ Code together in real-time, directly inside VS Code. No browser required.
 | Real-time code sync | ✅ | ✅ |
 | Live cursors | ✅ | ✅ |
 | Text chat | ✅ | ✅ |
-| File sharing | ✅ | ✅ |
+| Workspace sharing | ✅ | ✅ |
 | Code execution | ✅ | ✅ |
 | 2-person rooms | ✅ | ✅ |
-| 30-minute sessions | ✅ | — |
-| Video & audio calling | ❌ | ✅ |
-| Up to 5-person rooms | ❌ | ✅ |
-| Unlimited session time | ❌ | ✅ |
+| 30-minute sessions | ✅ | |
+| Video & audio calling | | ✅ |
+| Up to 5-person rooms | | ✅ |
+| Unlimited session time | | ✅ |
 
-## Activate a Pro License
+---
 
-`Ctrl+Shift+P` → **CodeSync: Activate License Key** → paste your key
+## Requirements
 
-## Settings
+- VS Code `1.85.0` or higher
+- An internet connection
+
+---
+
+## Extension Settings
 
 | Setting | Description |
 |---|---|
-| `codesync.username` | Your display name in rooms |
-| `codesync.serverUrl` | Custom server URL (advanced) |
+| `peersync.username` | Your display name shown to collaborators |
+| `peersync.serverUrl` | Custom signaling server URL (advanced) |
 
-## Tech
+---
 
-Built with [Yjs](https://github.com/yjs/yjs) (CRDT), [Socket.io](https://socket.io), and [WebRTC](https://webrtc.org).
+## Built With
+
+- [Yjs](https://github.com/yjs/yjs) — CRDT-based real-time sync
+- [Socket.io](https://socket.io) — WebSocket transport
+- [simple-peer](https://github.com/feross/simple-peer) — WebRTC peer-to-peer calls
+
+---
+
+## Feedback & Issues
+
+Found a bug or have a feature request? Open an issue on [GitHub](https://github.com/DalCreators/peerFull/issues).
