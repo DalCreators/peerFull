@@ -4,8 +4,13 @@
   "description": "Real-time collaborative coding with chat, audio, and video calling for VS Code",
   "version": "0.1.0",
   "publisher": "codesync",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.85.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DalCreators/peerFull"
   },
   "categories": [
     "Other"
