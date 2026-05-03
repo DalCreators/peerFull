@@ -281,4 +281,4 @@ Payments
 
 ## License
 
-MIT © CodeSync
+© CodeSync
